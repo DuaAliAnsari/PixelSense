@@ -1,0 +1,32 @@
+id,file,type,description,visible_text,album,suggested_label,taken
+img01,images/beach_trip.png,photo,Friends on a beach at sunset during a summer trip,,Travel,Travel,2026-08-14
+img02,images/mountain_hike.png,photo,Family hiking in the northern mountains,,Travel,Travel,2026-07-30
+img03,images/sea_sunset.png,photo,Sunset over the sea,,Travel,,2026-08-14
+img04,images/family_dinner.png,photo,Family dinner at a restaurant with a birthday cake,,Family,Family,2026-09-19
+img05,images/wedding_cousins.png,photo,Cousins posing together at a wedding event,,Family,Family,2026-09-26
+img06,images/cat_sofa.png,photo,Cat sleeping on a sofa,,Camera,,2026-10-02
+img07,images/biryani_plate.png,photo,Plate of biryani on a table,,Camera,Food,2026-10-09
+img08,images/receipt_grocery.png,receipt,Supermarket receipt,"Imtiaz Supermarket Total Rs 4,250 Date 12 Sep",Receipts,Travel,2026-09-12
+img09,images/receipt_restaurant.png,receipt,Restaurant receipt,"Cafe Total Rs 3,100 Date 3 Oct",Receipts,Receipt,2026-10-03
+img10,images/bill_electricity.png,bill,Electricity bill,"K-Electric Bill Amount due Rs 8,640 Due date 28 Oct",Bills,Receipt,2026-10-15
+img11,images/bill_internet.png,bill,Internet bill,"Internet bill Rs 3,500 due 5 Nov",Bills,Receipt,2026-10-18
+img12,images/ticket_flight.png,ticket,Flight boarding pass,Flight KHI to ISB Gate 14 Seat 12A,Travel,Travel,2026-08-12
+img13,images/shot_deadline.png,screenshot,Screenshot of an assignment notice,HCI assignment deadline 23 Nov submit on LMS,Screenshots,Study material,2026-10-12
+img14,images/shot_lecture.png,screenshot,Lecture slide screenshot,Lecture 7 Cognitive load theory,Screenshots,Study material,2026-10-08
+img15,images/shot_chat.png,screenshot,Chat screenshot about meeting up,Meet at 5pm outside the library,Screenshots,Study material,2026-10-20
+img16,images/shot_laptop.png,screenshot,Online listing for a laptop,"Laptop for sale Rs 185,000",Shopping,Shopping,2026-10-21
+img17,images/shot_shoes.png,screenshot,Sale post for running shoes,"Running shoes sale Rs 7,999",Shopping,Shopping,2026-10-17
+img18,images/poster_techfest.png,document,University tech fest poster,Tech Fest 14 Nov main auditorium,Screenshots,Event,2026-10-19
+img19,images/private_bank_sms.png,screenshot,Synthetic bank message screenshot,Your account balance alert (sample),Private,Receipt,2026-10-10
+img20,images/private_note.png,screenshot,Synthetic personal note screenshot,Personal note (sample),Private,,2026-10-11
+img21,images/images.jpg,photo,Family portrait at a wedding,,Family,,2026-09-26
+img22,images/images (1).jpg,photo,People jumping on a beach at sunset,,Travel,,2026-08-14
+img23,images/images (2).jpg,photo,Two people taking a selfie in a street crowd,,Camera,,2026-10-04
+img24,images/images (3).jpg,photo,Friends and family sharing dinner around a table,,Family,,2026-09-19
+img25,images/photo1.jpg,photo,Family sitting together in a field,,Family,,2026-09-06
+img26,images/wedding_standing.jpg,photo,"Wedding portrait, standing guests",,Family,,2026-09-26
+img27,images/wedding_seated.jpg,photo,"Wedding portrait, seated couple",,Family,,2026-09-26
+img28,images/selfie_closeup.jpg,photo,Selfie close-up in the crowd,,Camera,,2026-10-04
+img29,images/dinner_standing.jpg,photo,"Dinner with friends and family, standing guests",,Family,,2026-09-19
+img30,images/dinner_seated.jpg,photo,"Dinner with friends and family, seated guests",,Family,,2026-09-19
+img31,images/field_closeup.jpg,photo,Father and daughter in a field,,Family,,2026-09-06

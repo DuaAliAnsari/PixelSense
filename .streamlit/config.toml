@@ -1,0 +1,17 @@
+# Locks the app to a light theme. This is what fixes the "white text on white
+# input" problem: it happened when the browser/OS was in dark mode and
+# Streamlit switched its default text colour to white.
+[theme]
+base = "light"
+primaryColor = "#5B4FD6"
+backgroundColor = "#F5F6FB"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1F2140"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+showSidebarNavigation = false
+
+[browser]
+gatherUsageStats = false
