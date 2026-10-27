@@ -1,9 +1,9 @@
 """All CSS for PixelSense (kept apart so app.py stays readable)."""
 CSS = r"""
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 :root{--brand:#5B4FD6;--deep:#3A2FA0;--ink:#1F2140;--muted:#6B6F8C;--line:#E7E8F2;--bg:#F5F6FB}
 html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{background:#E9EAF4!important;color:#1F2140!important;
-  font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif!important}
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Inter',system-ui,'Segoe UI',Roboto,sans-serif!important}
 [data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stSidebar"],[data-testid="stSidebarCollapsedControl"],
 [data-testid="collapsedControl"],[data-testid="stDecoration"],#MainMenu,footer{display:none!important}
 .block-container,[data-testid="stMainBlockContainer"]{height:auto!important;flex:0 0 auto!important;align-self:flex-start!important;width:100%!important;margin:0 auto!important;min-height:100vh;max-width:480px!important;padding:0 24px 128px!important;background:#F5F6FB;
@@ -231,7 +231,7 @@ html,body{overflow-x:hidden!important}
 .dbadge.urgent{background:#FFF1D6;color:#8A5200}
 div[data-testid="stDialog"] div[role="dialog"]{max-width:min(92vw,460px)!important}
 
-/* =====================  V3: app bar, corner menu, bottom prompt bar, chat, people  ===================== */
+/* =====================  app bar, corner menu, bottom prompt bar, chat, people  ===================== */
 .st-key-appbar{margin-top:14px;margin-bottom:2px}
 .st-key-appbar [data-testid="stHorizontalBlock"]{align-items:center}
 .st-key-appbar [data-testid="stColumn"]:first-child,.st-key-appbar [data-testid="stColumn"]:last-child{flex:0 0 48px!important;width:48px!important;min-width:48px!important}
@@ -311,7 +311,7 @@ details.how ol{margin:6px 0 4px;padding-left:18px;line-height:1.55}
 .st-key-favbtn button{font-size:22px;padding:0;color:#D6455D}
 @media (max-width:480px){.st-key-composer,.st-key-actionbar,.st-key-navbar{width:100vw!important}}
 
-/* =====================  V4: DESKTOP / FULL-PAGE LAYOUT  =====================
+/* =====================  DESKTOP / FULL-PAGE LAYOUT  =====================
    Wide screens: full-page layout with a permanent left sidebar, centred content and multi-column grids.
    Phones (<=700px): the original single-column mobile layout, with the drawer menu. */
 html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{background:#F5F6FB!important}
@@ -378,7 +378,9 @@ div[data-testid="stDialog"] div[role="dialog"]{max-width:min(92vw,520px)!importa
 .st-key-start .stButton>button{min-height:54px;font-size:16px}
 
 /* ---------- buttons never stretch across a whole desktop screen ---------- */
-.st-key-faces_on,[class*="st-key-danger"],.st-key-plain_notnow{max-width:380px}
+.st-key-btn_faces_on,.st-key-plain_notnow{max-width:380px}
+[class*="st-key-danger"] .stButton{display:flex;justify-content:flex-start}
+[class*="st-key-danger"] .stButton>button{width:auto!important;min-width:180px}
 .st-key-v_person [data-testid="stHorizontalBlock"]:has(.st-key-per_rename){max-width:460px;margin:0 auto}
 .empty{max-width:640px;margin:20px auto}
 .consent{max-width:760px}
@@ -405,10 +407,9 @@ div[data-testid="stDialog"] div[role="dialog"]{max-width:min(92vw,520px)!importa
   .src .rthumb{width:112px;min-width:112px;height:84px}
   .rtitle{font-size:15.5px}
   .st-key-appbar{margin-bottom:10px}
-  [class*="st-key-sm_"] .stButton{display:flex;justify-content:flex-end}
+  [class*="st-key-sm_"] .stButton{display:flex;justify-content:flex-start}
   [class*="st-key-sm_"] .stButton>button{width:auto!important;min-width:150px}
-  .st-key-sm_forget .stButton,.st-key-sm_hist .stButton,.st-key-sm_arrive .stButton{justify-content:flex-start}
-  [class*="st-key-row_"]{padding:12px 18px!important}
+    [class*="st-key-row_"]{padding:12px 18px!important}
 }
 
 /* ---------- full desktop with sidebar (>=1000px) ---------- */
@@ -448,7 +449,7 @@ div[data-testid="stDialog"] div[role="dialog"]{max-width:min(92vw,520px)!importa
   .feat{padding:6px 4px}
 }
 
-/* =====================  V4b: welcome, Home dashboard, Clean up  ===================== */
+/* =====================  welcome, Home dashboard, Clean up  ===================== */
 /* welcome */
 .st-key-stack_wel{background:linear-gradient(150deg,#2F2593 0%,#5B4FD6 58%,#8A7DF5 100%);border-radius:36px;padding:56px!important;
   box-shadow:0 24px 50px rgba(75,63,199,.26);margin-bottom:28px}
@@ -509,7 +510,7 @@ div[data-testid="stDialog"] div[role="dialog"]{max-width:min(92vw,520px)!importa
   [class*="st-key-stats4_"] [data-testid="stHorizontalBlock"]{gap:10px!important}
 }
 
-/* =====================  V4c: photo editor  ===================== */
+/* =====================  photo editor  ===================== */
 .st-key-stack_edit [data-testid="stHorizontalBlock"]{gap:40px!important;align-items:flex-start!important}
 .st-key-stack_edit [data-testid="stColumn"] [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:14px!important}
 .edprev img{width:100%;max-height:560px;object-fit:contain;display:block;border-radius:22px;background:#E9EAF4;box-shadow:0 12px 30px rgba(31,33,64,.16)}
@@ -523,4 +524,228 @@ div[data-testid="stDialog"] div[role="dialog"]{max-width:min(92vw,520px)!importa
   .st-key-stack_edit [data-testid="stColumn"]{flex:1 1 100%!important;width:100%!important}
   .st-key-stack_edit [data-testid="stColumn"] [data-testid="stColumn"]{flex:1 1 0!important;width:auto!important}
 }
+"""
+
+
+GLASS = r"""
+/* =====================================================================================================
+   LIQUID GLASS DESIGN SYSTEM
+   Four ideas, taken from Apple's Liquid Glass language, applied here:
+   1. MATERIAL   translucent, blurred layers that let content and colour show through (glass), never flat grey boxes.
+   2. SHAPE      large, continuous rounded corners that NEST: inner radius = outer radius - padding (concentric).
+   3. TYPE       one family (SF Pro on Apple devices, Inter elsewhere), a clear scale, weights 500-700, tight tracking on titles.
+   4. SPACE      an 8-point grid (4/8/12/16/24/32). Navigation FLOATS above content so the photos stay the hero.
+   ===================================================================================================== */
+:root{
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;
+  --r-sm:14px;--r-md:20px;--r-lg:28px;--r-xl:36px;--r-pill:999px;
+  --glass:rgba(255,255,255,.56);--glass-strong:rgba(255,255,255,.78);--glass-edge:rgba(255,255,255,.82);
+  --glass-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 12px 32px rgba(52,44,140,.12);
+  --blur:blur(26px) saturate(180%);
+  --ink:#1D1F3A;--muted:#636786;--accent:#5B4FD6;--accent2:#3FA9F5;
+  --t-large:34px;--t-title:22px;--t-head:17px;--t-body:15px;--t-small:13px;--t-cap:12px;
+}
+.stApp{background:
+  radial-gradient(640px 520px at 8% 6%,rgba(122,108,240,.42),transparent 70%),
+  radial-gradient(620px 520px at 96% 14%,rgba(63,169,245,.34),transparent 70%),
+  radial-gradient(680px 560px at 72% 100%,rgba(255,140,175,.30),transparent 70%),
+  radial-gradient(520px 440px at 0% 92%,rgba(70,214,175,.26),transparent 70%),#EEF0FA!important;background-attachment:fixed!important}
+html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"]{background:transparent!important}
+
+/* ---- type scale ---- */
+body,.stApp{font-size:var(--t-body);letter-spacing:-.011em;-webkit-font-smoothing:antialiased}
+.sect b{font-size:var(--t-title);font-weight:700;letter-spacing:-.025em}
+.rtitle,.ab-title,.tb-title,.empty h3{font-weight:650;letter-spacing:-.02em}
+.h1,.hh-t,.wel-h{font-weight:700;letter-spacing:-.035em}
+.sub,.ccount{font-size:var(--t-small);color:var(--muted)!important}
+.lbl{font-weight:600;font-size:var(--t-cap)}
+.dr-row,.feat b,.stat .sn{font-weight:600}
+.stButton>button{font-weight:600;letter-spacing:-.01em}
+
+/* ---- material: every surface is glass ---- */
+.card,.stat,.feat,.empty,.banner,.glass,.found,.lcard,.ctile,.cov{
+  background:var(--glass)!important;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+  border:1px solid var(--glass-edge);box-shadow:var(--glass-shadow)!important;border-radius:var(--r-lg)}
+.banner{background:linear-gradient(120deg,rgba(255,244,221,.72),rgba(255,226,180,.62))!important}
+.tile{border-radius:var(--r-md);box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 6px 18px rgba(52,44,140,.14);border:1px solid rgba(255,255,255,.7)}
+.rthumb{border-radius:var(--r-sm)}
+.pill{background:rgba(255,255,255,.65);border:1px solid rgba(255,255,255,.8);backdrop-filter:blur(10px);font-weight:600}
+.pill.warn{background:rgba(255,236,196,.8)}.pill.good{background:rgba(214,246,229,.85)}.pill.gray{background:rgba(238,240,248,.8)}.pill.bad{background:rgba(255,222,226,.9);color:#9B2236}
+.dbadge{border-radius:var(--r-sm);background:rgba(238,235,255,.85);box-shadow:0 1px 0 rgba(255,255,255,.9) inset}
+.dbadge.urgent{background:rgba(255,236,196,.9)}
+.setrow .si,.feat .fi,.stat .sic,.banner .bic{border-radius:var(--r-sm);background:rgba(255,255,255,.7);box-shadow:0 1px 0 rgba(255,255,255,.9) inset}
+
+/* ---- buttons: capsules with a specular edge ---- */
+.stButton>button{border-radius:var(--r-pill);background:var(--glass-strong);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  border:1px solid var(--glass-edge);box-shadow:0 1px 0 rgba(255,255,255,.95) inset,0 4px 14px rgba(52,44,140,.10)}
+.stButton>button:hover{background:rgba(255,255,255,.92);border-color:rgba(255,255,255,.95)}
+.stButton>button[kind="primary"],.stButton>button[data-testid="stBaseButton-primary"]{
+  background:linear-gradient(135deg,rgba(122,108,240,.96),rgba(75,63,199,.96))!important;border:1px solid rgba(255,255,255,.35)!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.45) inset,0 10px 24px rgba(91,79,214,.34)!important}
+[class*="st-key-back"] button{border-radius:50%}
+
+/* ---- inputs ---- */
+[data-testid="stTextInput"] [data-baseweb="input"]{background-color:var(--glass-strong)!important;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+  border:1px solid var(--glass-edge)!important;box-shadow:0 1px 0 rgba(255,255,255,.95) inset,0 8px 24px rgba(52,44,140,.12)!important;border-radius:var(--r-pill)!important}
+
+/* ---- navigation FLOATS: the sidebar is an inset glass panel, the prompt bar a glass capsule ---- */
+.st-key-drawer{background:var(--glass-strong)!important;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+  border:1px solid var(--glass-edge);border-radius:0 var(--r-lg) var(--r-lg) 0!important}
+.dr-row{border-radius:var(--r-md);transition:background .15s,transform .12s}
+.dr-row.on{background:rgba(91,79,214,.14)!important;box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 0 0 1px rgba(91,79,214,.12) inset}
+.dr-row:not(.on):hover{background:rgba(255,255,255,.6)!important}
+.dr-row small{background:rgba(91,79,214,.12);color:#4A3FC2;border-radius:var(--r-pill);padding:2px 8px;font-weight:700}
+.dr-row small:empty{display:none}
+.dr-note{color:var(--muted)}
+@media (min-width:1000px){
+  .st-key-sidebar{top:var(--sp-4)!important;bottom:var(--sp-4)!important;left:var(--sp-4)!important;width:256px!important;max-width:256px!important;
+    background:var(--glass)!important;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--glass-edge)!important;
+    border-radius:var(--r-xl)!important;box-shadow:var(--glass-shadow)!important;padding:var(--sp-5) var(--sp-3)!important}
+  [data-testid="stMainBlockContainer"]:has(.st-key-sidebar){padding-left:calc(256px + 16px + 40px)!important}
+  [data-testid="stMainBlockContainer"]:has(.st-key-sidebar) .st-key-composer{left:calc(50% + 136px)!important}
+}
+.st-key-composer{background:none!important}
+.cbtn{background:var(--glass-strong);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid var(--glass-edge);
+  box-shadow:0 1px 0 rgba(255,255,255,.95) inset,0 8px 22px rgba(52,44,140,.16)}
+.cbtn.send{background:linear-gradient(135deg,#7A6CF0,#4B3FC7);border-color:rgba(255,255,255,.35)}
+.ibtn{background:var(--glass-strong);border:1px solid var(--glass-edge);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+.st-key-plussheet{background:var(--glass-strong)!important;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--glass-edge);border-radius:var(--r-lg)!important}
+.st-key-actionbar{background:var(--glass-strong)!important;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur)}
+.st-key-snack{background:rgba(29,31,58,.78)!important;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid rgba(255,255,255,.18);border-radius:var(--r-lg)!important}
+div[data-testid="stDialog"] div[role="dialog"]{background:var(--glass-strong)!important;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+  border:1px solid var(--glass-edge);border-radius:var(--r-xl)!important;box-shadow:0 30px 80px rgba(40,30,120,.28)!important}
+
+/* ---- hero panels: saturated colour under a glass sheen ---- */
+.st-key-homehero,.st-key-stack_wel{border-radius:var(--r-xl)!important;
+  background:linear-gradient(150deg,rgba(47,37,147,.96),rgba(91,79,214,.94) 58%,rgba(63,169,245,.86))!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 24px 56px rgba(75,63,199,.30)!important;border:1px solid rgba(255,255,255,.28)}
+.hh-t{font-size:var(--t-large)}
+.st-key-why .stButton>button{background:rgba(255,255,255,.18)!important;color:#fff!important;border:1px solid rgba(255,255,255,.5)!important;box-shadow:none!important}
+.st-key-why{max-width:240px!important;margin:0!important}
+.st-key-start .stButton>button,.st-key-start .stButton>button[kind="primary"],.st-key-start .stButton>button[data-testid="stBaseButton-primary"]{
+  background:rgba(255,255,255,.94)!important;color:#3A2FA0!important;border:1px solid #fff!important;box-shadow:0 1px 0 #fff inset,0 12px 28px rgba(15,8,80,.30)!important}
+.st-key-start .stButton>button p{color:#3A2FA0!important}
+[class*="st-key-chips"] .stButton>button{background:rgba(255,255,255,.22);color:#fff;border:1px solid rgba(255,255,255,.45)}
+[class*="st-key-chips"] .stButton>button:hover{background:rgba(255,255,255,.4);color:#fff}
+.st-key-homehero [class*="st-key-chips"] .stButton>button p{color:#fff!important}
+
+/* ---- activity screen (analysing): glass card + glass spinner ---- */
+.spin{border:6px solid rgba(255,255,255,.7);border-top-color:var(--accent);box-shadow:0 8px 30px rgba(91,79,214,.25),0 1px 0 rgba(255,255,255,.9) inset;background:var(--glass)}
+.stepi{border-bottom:1px solid rgba(255,255,255,.7)}
+.empty .ic{background:rgba(255,255,255,.7)}
+
+/* ---- Needs attention ---- */
+.att-hero{display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-5);flex-wrap:wrap}
+.att-hero .ah-n{font-size:var(--t-large);font-weight:700;letter-spacing:-.04em;color:var(--ink);line-height:1.05}
+.att-hero .ah-l{font-size:var(--t-small);color:var(--muted);margin-top:2px;max-width:220px}
+.ah-sep{width:1px;align-self:stretch;background:rgba(91,79,214,.18)}
+[class*="st-key-att_img"],[class*="st-key-att_m"]{background:var(--glass);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--glass-edge);
+  border-radius:var(--r-lg);box-shadow:var(--glass-shadow);padding:var(--sp-4)!important;gap:var(--sp-3)!important}
+.att-row{display:flex;gap:var(--sp-3);align-items:center}
+.att-thumb{width:96px;height:72px;border-radius:var(--r-sm);object-fit:cover;flex:0 0 96px;box-shadow:0 4px 12px rgba(52,44,140,.16)}
+.att-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.att-proof{font-size:var(--t-cap);color:var(--muted);line-height:1.45}
+.att-proof i{color:var(--ink);background:rgba(228,223,255,.7);border-radius:6px;padding:1px 6px;font-style:normal;font-weight:500}
+[class*="st-key-sm_att_"] [data-testid="stHorizontalBlock"]{gap:var(--sp-2)!important}
+[class*="st-key-sm_att_"]{max-width:420px}
+[class*="st-key-sm_att_"] .stButton{display:flex;justify-content:flex-start!important}
+[class*="st-key-sm_att_"] .stButton>button{min-width:0!important;width:100%!important}
+.calm{display:flex;flex-direction:column;gap:2px;font-size:var(--t-body)}
+.calm small{color:var(--muted)}
+.health{display:flex;gap:var(--sp-5);align-items:center;padding:var(--sp-4) var(--sp-5);margin-top:var(--sp-2)}
+
+/* ---- Study mode ---- */
+.st-key-studybar{position:fixed!important;top:12px;left:50%;transform:translateX(-50%);z-index:1000;width:min(720px,calc(100vw - 24px))!important;
+  display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center!important;gap:var(--sp-3)!important;padding:10px 12px 10px 20px!important;border-radius:var(--r-lg);
+  background:rgba(29,31,58,.86);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid rgba(255,255,255,.2);box-shadow:0 12px 32px rgba(20,16,70,.3)}
+.st-key-studybar>div{width:auto!important;min-width:0!important}
+.st-key-studybar>div:first-child{flex:1 1 0!important}
+.st-key-studybar>div:last-child{flex:0 0 auto!important;width:max-content!important}
+.st-key-studybar .stButton{width:max-content!important}
+.sb-t span{display:block;font-size:var(--t-cap);color:rgba(255,255,255,.65);font-weight:600}
+.sb-t b{display:block;color:#fff;font-size:14px;font-weight:600;line-height:1.3}
+.st-key-studybar .stButton>button{min-height:40px;white-space:nowrap;width:auto;padding:0 18px}
+.st-key-sm_stb .stButton>button,.st-key-sm_bl .stButton>button,.st-key-sm_addd .stButton>button,.st-key-sm_study .stButton>button{width:auto;min-width:180px}
+
+/* ---- Why PixelSense ---- */
+.about-hero{padding:var(--sp-6)}
+.about-h{font-size:var(--t-large);font-weight:700;letter-spacing:-.04em;line-height:1.12;color:var(--ink);margin:var(--sp-2) 0 var(--sp-3);max-width:640px}
+.about-hero p{font-size:16px;line-height:1.55;color:var(--muted);max-width:640px;margin:0}
+.loop{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:var(--sp-5);margin-bottom:var(--sp-3)}
+.loop span{display:block;font-size:var(--t-cap);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8A8EA8;margin-bottom:6px}
+.loop b{font-size:var(--t-head);font-weight:650;letter-spacing:-.02em;line-height:1.3;color:var(--ink)}
+.loop p{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}
+.loop .lp-c p{color:var(--ink)}
+.loop .lp-c{border-left:3px solid rgba(91,79,214,.5);padding-left:var(--sp-4)}
+@media (max-width:760px){.loop{grid-template-columns:1fr;gap:var(--sp-3)}.att-thumb{width:72px;height:56px;flex-basis:72px}.att-hero{gap:var(--sp-4)}.ah-sep{display:none}}
+@media (max-width:480px){.att-thumb{display:none}}
+
+/* ---- Your data ---- */
+.dmap{display:flex;gap:var(--sp-4);align-items:flex-start;margin-bottom:var(--sp-2)}
+.dmap .si{flex:0 0 40px;height:40px;border-radius:var(--r-sm);display:grid;place-items:center;color:var(--accent);background:rgba(255,255,255,.7)}
+.dm-t{display:flex;justify-content:space-between;gap:var(--sp-3);align-items:baseline;flex-wrap:wrap}
+.dm-t b{font-size:var(--t-head);font-weight:650;letter-spacing:-.02em}
+.dm-t em{font-style:normal;font-size:var(--t-small);font-weight:600;color:var(--accent)}
+.dmap p{margin:4px 0 8px;font-size:14px;line-height:1.5;color:var(--muted)}
+.dm-m{font-size:var(--t-cap);color:var(--ink);line-height:1.6}
+.dm-m span{font-weight:600;color:#8A8EA8;text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
+.st-key-sm_dl [data-testid="stDownloadButton"] button{border-radius:var(--r-pill);min-height:38px;font-weight:600;width:auto;min-width:150px}
+.st-key-sm_dl [data-testid="stHorizontalBlock"]{justify-content:flex-start;gap:12px!important;flex-wrap:wrap}
+.st-key-sm_dl [data-testid="stColumn"]{flex:0 0 auto!important;width:auto!important;min-width:0!important}
+.st-key-sm_dl .stButton>button,.st-key-sm_dl [data-testid="stDownloadButton"] button{width:auto!important;min-width:180px}
+
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .card,.stat,.feat,.empty,.glass,.st-key-sidebar,.st-key-drawer,.st-key-plussheet,.st-key-actionbar,[class*="st-key-att_img"]{background:#fff!important}
+}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+"""
+CSS = CSS + GLASS
+
+CSS = CSS + r"""
+/* ---------- v5 polish: visible outlines, readable chips, consistent spacing ---------- */
+.stButton>button{background:#fff;color:#1F2140;border:1.5px solid #D5D2F3;box-shadow:0 2px 8px rgba(31,33,64,.06);font-weight:600}
+.stButton>button:hover{border-color:#5B4FD6;background:#F7F6FF;color:#4B3FC7}
+.stButton>button[kind="primary"],.stButton>button[data-testid="stBaseButton-primary"]{border:none!important}
+/* filter / suggestion chips: dark text on a solid pill, selected = brand colour */
+[class*="st-key-chips"] .stButton>button{background:#fff;color:#1F2140;border:1.5px solid #D5D2F3;box-shadow:none}
+[class*="st-key-chips"] .stButton>button p{color:#1F2140!important}
+[class*="st-key-chips"] .stButton>button:hover{background:#F1EFFF;border-color:#5B4FD6}
+[class*="st-key-chips"] .stButton>button[kind="primary"],[class*="st-key-chips"] .stButton>button[data-testid="stBaseButton-primary"]{background:linear-gradient(135deg,#6A5CF0,#4B3FC7)!important;color:#fff!important}
+[class*="st-key-chips"] .stButton>button[kind="primary"] p,[class*="st-key-chips"] .stButton>button[data-testid="stBaseButton-primary"] p{color:#fff!important}
+.st-key-homehero [class*="st-key-chips"] .stButton>button{background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.55);color:#fff}
+.st-key-homehero [class*="st-key-chips"] .stButton>button p{color:#fff!important}
+.st-key-homehero [class*="st-key-chips"] .stButton>button:hover{background:rgba(255,255,255,.38)}
+/* two-button action rows: same width, same height, same gap */
+[class*="st-key-cuact_"] [data-testid="stHorizontalBlock"]{gap:12px!important;max-width:460px}
+[class*="st-key-cuact_"] .stButton>button{min-height:46px;width:100%}
+/* settings rows: action button sits at the right edge of the row */
+[class*="st-key-row_"] [class*="st-key-sm_"] .stButton{justify-content:flex-end}
+[class*="st-key-row_"] [class*="st-key-sm_"] .stButton>button{min-width:130px;width:auto!important}
+/* face-groups consent: both buttons share one width and left edge */
+.st-key-btn_faces_on,.st-key-plain_notnow{max-width:380px;margin-left:0!important}
+.st-key-plain_notnow .stButton>button{background:transparent!important;border:none!important;box-shadow:none!important;color:#6B6F8C!important;font-weight:600}
+.st-key-plain_notnow [data-testid="stElementContainer"],.st-key-plain_notnow{background:none!important;box-shadow:none!important;border:none!important}
+/* month headings and section headings breathe */
+.st-key-sm_addd .stButton{justify-content:flex-end}
+.monthh{margin-top:28px;margin-bottom:2px}
+.sect{margin-top:22px}
+
+/* ---------- v6 alignment: fixed widths, one left edge ---------- */
+.st-key-consent_btns{max-width:380px!important;width:100%!important;margin:0!important}
+.st-key-consent_btns .stButton>button{width:100%!important;min-height:48px}
+.st-key-consent_btns,.st-key-consent_btns *,.st-key-plain_notnow,.st-key-plain_notnow *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.st-key-plain_notnow,.st-key-plain_notnow [data-testid="stElementContainer"],.st-key-plain_notnow [data-testid="stButton"]{background:none!important;box-shadow:none!important;border:none!important;max-width:100%!important}
+.st-key-plain_notnow .stButton>button{background:none!important;border:none!important;box-shadow:none!important;color:#6B6F8C!important}
+/* researcher tools: three buttons, one width, one left edge */
+.st-key-sm_arrive,.st-key-sm_study,.st-key-danger_reset{width:100%!important;max-width:100%!important}
+.st-key-sm_arrive .stButton,.st-key-sm_study .stButton,.st-key-danger_reset .stButton{display:flex!important;justify-content:flex-start!important}
+.st-key-sm_arrive .stButton>button,.st-key-sm_study .stButton>button,.st-key-danger_reset .stButton>button{width:260px!important;min-width:260px!important;max-width:100%!important;min-height:44px}
+/* top-right action buttons sit on the right edge of the page */
+.st-key-sm_new .stButton{display:flex!important;justify-content:flex-end!important}
+.st-key-sm_new .stButton>button{width:auto!important;min-width:110px}
+
+/* face consent: Not now is a normal outlined button, same size as the primary */
+.st-key-consent_btns [data-testid="stVerticalBlock"]{gap:12px!important}
+.st-key-consent_btns .stButton>button{background:#fff;border:1.5px solid #D5D2F3!important;color:#1F2140}
+.st-key-consent_btns .stButton>button[kind="primary"],.st-key-consent_btns .stButton>button[data-testid="stBaseButton-primary"]{background:linear-gradient(135deg,#6A5CF0,#4B3FC7)!important;border:none!important;color:#fff}
 """

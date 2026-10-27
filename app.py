@@ -1,4 +1,7 @@
-"""PixelSense V3 - a chat-first photo assistant (HCI prototype, Google Photos style).
+"""PixelSense - a chat-first photo assistant that rescues deadlines and bills trapped inside photos (HCI prototype).
+
+Core features: Needs attention (the core problem), Why PixelSense (problem + loopholes), Your data (information architecture,
+consent-based analytics) and a Liquid Glass visual system. See PROBLEM_AND_DESIGN.md.
 
 Screens: Ask PixelSense (chat), Photos (timeline), People (face groups), Collections, Photo details, Settings.
 Navigation lives in the top-left corner menu; the prompt bar sits at the bottom with a "+" for new collections.
@@ -15,13 +18,15 @@ import io
 import re
 import time
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import streamlit as st
 from PIL import Image, ImageOps
 
+import analytics as AN
 import editor as ED
+import study as ST
 import engine as E
 from engine import AUTO, CAT_ORDER, HELD, R, df
 from styles import CSS
@@ -34,6 +39,7 @@ TYPE_FILTERS = ["All", "Photo", "Screenshot", "Receipt", "Bill", "Ticket", "Docu
 TILE_COLORS = [("#EEEBFF", "#5B4FD6"), ("#FFE9EC", "#D6455D"), ("#E3F6EC", "#18936A"),
                ("#FFF1D6", "#C27A00"), ("#E1F1FF", "#2A7DD1"), ("#F3E8FF", "#9333EA")]
 HOME_CHIPS = {
+    "What needs my attention?": "What needs my attention?",
     "HCI deadline": "When is my HCI assignment due?",
     "Electricity bill": "How much is the electricity bill?",
     "Who’s at dinner?": "Who is in the dinner photo?",
@@ -42,7 +48,9 @@ HOME_CHIPS = {
     "Edit by chat": "Make the wedding photos black and white and save to Eid",
     "My receipts": "Show my receipts",
 }
-UNDO_KEYS = ["override", "extra_cats", "excluded_cats", "excluded_imgs", "removed", "names", "hidden_people", "notp", "fav", "kept", "copies"]
+ATTENTION_CHIP = "What needs my attention?"
+ATTENTION_RE = re.compile(r"needs?\s+(my\s+)?attention|what('s| is| are)\s+(due|overdue|coming up)|upcoming|deadlines|overdue|anything due", re.I)
+UNDO_KEYS = ["override", "extra_cats", "excluded_cats", "excluded_imgs", "removed", "names", "hidden_people", "notp", "fav", "kept", "copies", "done", "manual"]
 
 ICONS = {
     "home": '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V20h14v-9.5"/><path d="M10 20v-5h4v5"/>',
@@ -101,14 +109,15 @@ def fresh_state():
         view="welcome", back="chat", query="", rfilter="All", hfilter="All", sel=None, cur_coll=None, cur_person=None,
         override={}, extra_cats=[], excluded_cats={"Sensitive"}, excluded_imgs=set(), removed=set(), arrived=set(),
         names={}, hidden_people=set(), notp=set(), faces_on=None, fav=set(), kept=set(), cur_mem=None, copies=[], copy_seq=0, llm_on=False,
-        history=[], searches=[], snack=None, scroll=False, menu=False, plus=False, chat=[], res=None,
+        history=[], searches=[], done=set(), study=None, opened=set(), manual=[], manual_seq=0, analytics_on=False, events=[], snack=None, scroll=False, menu=False, plus=False, chat=[], res=None,
     )
 
 
 if "boot" not in S:
     S.update(fresh_state())
     S.boot = True
-E.sync_copies(S.copies)   # keep the library tables in step with this session (edited copies, undo, reset)
+E.sync_copies(S.copies)
+E.sync_opened(S.opened)   # keep the library tables in step with this session (edited copies, undo, reset)
 
 
 @st.cache_data(show_spinner=False)
@@ -165,23 +174,30 @@ def coll_items(name):
     return [r.id for r in visible_rows() if cat_of(r) == name]
 
 
-def upcoming():
-    """Dates found in prepared in-image text (bills, notices, posters). Real parsing, prepared text."""
-    today, out = date.today(), []
-    for r in visible_rows():
-        if r.type not in ("bill", "screenshot", "document"):
-            continue
-        t = r.visible_text
-        m = re.search(r"(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)", t)
-        kind = next((k for w, k in (("due", "Due"), ("deadline", "Deadline"), ("fest", "Event")) if w in t.lower()), None)
-        if not (m and kind):
-            continue
-        d = datetime.strptime(f"{m.group(1)} {m.group(2)} {today.year}", "%d %b %Y").date()
-        if d < today:
-            d = d.replace(year=today.year + 1)
-        amt = re.search(r"Rs\s?[\d,]+", t)
-        out.append((r, kind, d, (d - today).days, f" · {amt.group(0)}" if amt else ""))
-    return sorted(out, key=lambda x: x[3])[:3]
+def deadline_items(include_done=False):
+    """All dated obligations found in photos the AI may use (see engine.deadlines), minus ones already ticked off."""
+    items = sorted(E.deadlines(visible_rows(), date.today()) + E.manual_deadlines(S.manual, date.today()), key=lambda d: d["days"])
+    return [d for d in items if include_done or d["id"] not in S.done]
+
+
+def done_items():
+    every = E.deadlines([r for r in df.itertuples() if arrived_ok(r) and r.id not in S.removed], date.today()) + E.manual_deadlines(S.manual, date.today())
+    return [d for d in every if d["id"] in S.done]
+
+
+def title_of(i):
+    return next((m["title"] for m in S.manual if m["id"] == i), None) or R[i].description
+
+
+def library_health():
+    """Progress, not a grade. Counts things you have *reviewed*: deadlines handled + clutter groups decided.
+    Keeping a photo and removing a photo count the same, so there is no reward for deleting blindly."""
+    pool = [r for r in df.itertuples() if arrived_ok(r) and r.id not in S.excluded_imgs and cat_of(r) not in S.excluded_cats]
+    all_dl = [d["id"] for d in E.deadlines([r for r in pool if r.id not in S.removed], date.today())]
+    flagged = [r.id for v in E.cleanup_groups(pool, ()).values() for r in v]
+    total = len(all_dl) + len(flagged)
+    handled = len([i for i in all_dl if i in S.done]) + len([i for i in flagged if i in S.kept or i in S.removed])
+    return handled, total
 
 
 # ---- people ---------------------------------------------------------------------------------------
@@ -219,12 +235,29 @@ def make_ctx():
 
 
 # --------------------------------------------------------------------------- navigation, undo, chat
+def track(name, **detail):
+    """Record a usage event, but only if the person opted in. Event names are allow-listed in analytics.py."""
+    if S.analytics_on:
+        ev = AN.new_event(name, **detail)
+        if ev:
+            S.events.append(ev)
+
+
+def study_tick(key):
+    """Count screens visited and undo taps while a study task is running (objective effort measures)."""
+    if S.study and S.study.get("running"):
+        S.study[key] = S.study.get(key, 0) + 1
+
+
 def go(view):
-    S.view, S.snack, S.menu, S.plus, S.scroll = view, None, False, False, True
+    study_tick("nav")
+    track("screen_open", screen=view)
+    S.view, S.snack, S.menu, S.plus, S.scroll = ("home" if view == "attention" else view), None, False, False, True
     st.rerun()
 
 
 def open_image(i):
+    S.opened.add(i)
     S.back = S.view if S.view != "detail" else S.back
     S.sel = i
     go("detail")
@@ -267,6 +300,7 @@ def snap():
 def undo():
     if S.history:
         S.update(S.history.pop())
+        study_tick("undos")
         notify("Last change undone.", False)
 
 
@@ -353,6 +387,11 @@ def ask(q):
     q = (q or "").strip()
     if not q:
         return
+    if ATTENTION_RE.search(q) and not re.search(r"\bhci\b|assignment|bill|electricity|internet", q, re.I):
+        track("search", words=len(q.split()))
+        S.view, S.snack, S.menu, S.plus, S.scroll = "home", None, False, False, True
+        return
+    track("search", words=len(q.split()))
     remember_search(q)
     S.chat.append({"role": "user", "text": q})
     ctx = make_ctx()
@@ -644,19 +683,19 @@ def view_welcome():
         left, right = st.columns([1, 1])
         with left:
             md(f'''<div class="wel-brand"><span class="wel-logo2">{svg("sparkle", 22, "#5B4FD6", 1.2, "#5B4FD6")}</span>PixelSense</div>
-              <div class="wel-h">Ask your photos anything.</div>
-              <div class="wel-p">PixelSense sorts your library, answers questions from the text inside your pictures and helps you clean up the clutter.</div>''')
+              <div class="wel-h">Your photo library, organised the way you ask.</div>
+              <div class="wel-p">Find any photo in your own words, clear out blurry and duplicate shots, and keep what matters. You decide what the AI can read, and everything stays on your device.</div>''')
             if st.button("Get started", type="primary", key="start"):
                 go("analysing")
-            md('<div class="wel-note">HCI prototype · sample photos only</div>')
+            md('<div class="wel-note">HCI prototype · sample photos only · no tracking, no cookies</div>')
         with right:
             md(f'''<div class="mos">
               <div class="m a"><img src="{t("images/images (1).jpg", 600, 360)}" alt=""></div>
               <div class="m b"><img src="{t("images/images.jpg", 300, 380)}" alt=""></div>
               <div class="m c"><img src="{t("images/photo1.jpg", 300, 180)}" alt=""></div>
               <div class="m d"><img src="{t("images/images (3).jpg", 300, 180)}" alt=""></div></div>''')
-    md(f'''<div class="feats"><div class="feat"><div class="fi">{svg("sparkle", 24)}</div><div><b>Ask in plain words</b><small>“When is my assignment due?” is answered from the text inside your photos.</small></div></div>
-      <div class="feat"><div class="fi">{svg("trash", 24)}</div><div><b>Clean up in a tap</b><small>Blurry shots, tiny images and old screenshots are grouped together for you to review.</small></div></div>
+    md(f'''<div class="feats"><div class="feat"><div class="fi">{svg("clock", 24)}</div><div><b>Needs attention</b><small>Due dates and amounts are read from your photos, with the exact words shown as proof.</small></div></div>
+      <div class="feat"><div class="fi">{svg("sparkle", 24)}</div><div><b>Ask in plain words</b><small>“When is my assignment due?” is answered from the text inside your photos.</small></div></div>
       <div class="feat"><div class="fi">{svg("shield", 24)}</div><div><b>You stay in control</b><small>Pause AI on any collection, move any photo, and undo every change.</small></div></div></div>''')
 
 
@@ -703,49 +742,30 @@ def view_chat():
 
 
 def coming_up_ui():
-    soon = upcoming()
-    if not soon:
+    soon = deadline_items()
+    if not soon and not S.done:
         return
-    md('<div class="sect"><b>Coming up</b><span>from text in your photos</span></div>')
+    section("Needs attention", "read from your photos", "attention", key="ca")
+    if not soon:
+        md('<div class="card pad calm"><b>You’re clear.</b><small>Every bill and deadline found in your photos is ticked off.</small></div>')
+        return
     with st.container(key="cards3_upc"):
         cols = st.columns(3)
-        for c, (r, kind, d, days, extra) in zip(cols, soon):
-            when = "today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days"
-            urgent = " urgent" if days <= 7 else ""
+        for c, d in zip(cols, soon[:3]):
+            urgent = " urgent" if d["urgency"] in ("overdue", "soon") else ""
+            extra = f" · Rs {d['money']:,}" if d["money"] else ""
             with c:
-                tappable(f"upc_{r.id}",
-                         f'<div class="card upc pressable"><div class="dbadge{urgent}"><b>{d.day}</b><span>{d.strftime("%b").upper()}</span></div>'
-                         f'<div style="flex:1;min-width:0"><div class="rtitle">{esc(r.description)}</div>'
-                         f'<div class="ccount">{kind} {when}{extra}</div></div><div class="chev">{svg("chev", 20)}</div></div>',
-                         open_image, r.id, label=f"Open {r.description}")
+                tappable(f"upc_{d['id']}",
+                         f'<div class="card upc pressable glass"><div class="dbadge{urgent}"><b>{d["date"].day}</b><span>{d["date"].strftime("%b").upper()}</span></div>'
+                         f'<div style="flex:1;min-width:0"><div class="rtitle">{esc(d["title"])}</div>'
+                         f'<div class="ccount">{d["kind"]} {E.when_words(d["days"])}{extra}</div></div><div class="chev">{svg("chev", 20)}</div></div>',
+                         go, "attention", label=f"Open {d['title']} in Needs attention")
 
 
 def intro():
     md('<div class="greet"><h2>What are you looking for?</h2><p>Ask in your own words. I can find photos, answer questions from the text inside them, '
        'group them by person, and make collections. I only use photos the AI is allowed to read.</p></div>')
     chips("ask", list(HOME_CHIPS), None, ask_chip)
-
-    if S.faces_on:
-        ppl = shown_people()[:5]
-        if ppl:
-            c1, c2 = st.columns([3, 1])
-            with c1:
-                md('<div class="sect" style="margin-top:6px"><b>People</b></div>')
-            with c2:
-                with st.container(key="link_ppl"):
-                    if st.button("See all", key="link_seeppl"):
-                        go("people")
-            cols = st.columns(5)
-            for c, pid in zip(cols, ppl):
-                with c:
-                    tappable(f"ip_{pid}", f'<div class="ptile sm pressable">{avatar(pid, 60)}<div class="pname {"" if pid in S.names else "un"}" style="font-size:11.5px">{esc(pname(pid))}</div></div>',
-                             open_person, pid, label=f"Open {pname(pid)}")
-    elif S.faces_on is None:
-        tappable("faces_cta", f'<div class="banner pressable"><div class="bic">{svg("users", 26, "#C27A00")}</div><div style="flex:1"><b>Group photos by person?</b>'
-                              f'<small>Turn on face groups to ask “photos of Person 1”. You decide.</small></div>{svg("chev", 22, "#C27A00")}</div>',
-                 go, "people", label="Open People")
-
-    coming_up_ui()
 
 
 def open_results(rp):
@@ -847,6 +867,22 @@ def cover_card(img_file, title, sub):
             f'<div class="cb"><div class="rtitle">{esc(title)}</div><div class="ccount">{esc(sub)}</div></div></div>')
 
 
+def health_card():
+    handled, total = library_health()
+    if not total:
+        return
+    pct = round(100 * handled / total)
+    circ = 2 * 3.14159 * 34
+    ring = (f'<svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="34" fill="none" stroke="rgba(91,79,214,.15)" stroke-width="9"/>'
+            f'<circle cx="42" cy="42" r="34" fill="none" stroke="url(#hg)" stroke-width="9" stroke-linecap="round" stroke-dasharray="{circ * pct / 100:.1f} {circ:.1f}" transform="rotate(-90 42 42)"/>'
+            f'<defs><linearGradient id="hg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7A6CF0"/><stop offset="1" stop-color="#3FA9F5"/></linearGradient></defs>'
+            f'<text x="42" y="48" text-anchor="middle" font-size="19" font-weight="700" fill="#1F2140">{pct}%</text></svg>')
+    msg = "All reviewed. Nice and tidy." if handled == total else f"{total - handled} left to review"
+    md(f'<div class="card glass health"><div>{ring}</div><div style="flex:1"><div class="rtitle">Library progress</div>'
+       f'<div class="ccount">{handled} of {total} reviewed · {msg}</div>'
+       '<div class="att-proof">Counts bills and deadlines you handled, plus clutter you decided on. Keep and Remove count the same, so deleting is never rewarded.</div></div></div>')
+
+
 def view_home():
     appbar("Home")
     snack_ui()
@@ -854,12 +890,8 @@ def view_home():
     groups = E.cleanup_groups(rows, S.kept)
     n_clean = sum(len(v) for v in groups.values())
     cats = [c for c in all_cats() if c not in S.excluded_cats]
-    with st.container(key="homehero"):
-        md('<div class="hh-t">What are you looking for?</div>'
-           '<div class="hh-s">Type in the bar below, or start with one of these.</div>')
-        chips("ask", list(HOME_CHIPS), None, ask_chip)
-
-    stats = [("photos", "Photos", len(rows), "image", "photos"), ("colls", "Collections", len(cats), "folder", "collections"),
+    n_att = len(deadline_items())
+    stats = [("coll", "Collections", len(cats), "folder", "collections"), ("photos", "Photos", len(rows), "image", "photos"),
              ("clean", "To review", n_clean, "trash", "cleanup"),
              ("ppl", "People", len(shown_people()), "users", "people")]
     with st.container(key="stats4_home"):
@@ -869,12 +901,18 @@ def view_home():
                 tappable(f"st_{k}", f'<div class="stat pressable"><span class="sic">{svg(ic, 22)}</span><div><div class="sn">{n}</div><div class="sl">{lab}</div></div></div>',
                          go, target, label=f"Open {lab}")
 
-    coming_up_ui()
+    if S.faces_on is None:
+        tappable("faces_cta", f'<div class="banner pressable"><div class="bic">{svg("users", 26, "#C27A00")}</div><div style="flex:1"><b>Group photos by person?</b>'
+                              f'<small>Turn on face groups to ask “photos of Person 1”.</small></div>{svg("chev", 22, "#C27A00")}</div>',
+                 go, "people", label="Open People")
+
+    attention_ui()
+    health_card()
 
     if n_clean:
         thumbs = "".join(f'<img src="{img_uri(r.file, 120, 90)}" alt="">' for r in [x for v in groups.values() for x in v][:3])
         tappable("home_clean", f'<div class="banner pressable"><div class="bic">{svg("trash", 26, "#C27A00")}</div><div style="flex:1"><b>{n_clean} photos you may not need</b>'
-                               f'<small>Blurry, low-resolution and screenshot photos, grouped for a quick review. Nothing is removed without you.</small></div>'
+                               f'<small>Blurry, low-resolution and screenshot photos, grouped for a quick review. Nothing is removed without your consent.</small></div>'
                                f'<div class="bthumbs">{thumbs}</div>{svg("chev", 22, "#C27A00")}</div>', go, "cleanup", label="Review clean-up")
 
     if cats:
@@ -915,10 +953,9 @@ def view_home():
 
 
 @st.dialog("Remove these photos?")
-def clean_dialog(key):
-    ids = [r.id for r in E.cleanup_groups(visible_rows(), S.kept)[key]]
-    title = E.CLEAN_META[key][0].lower()
-    md(f'<div class="info"><p><b>{len(ids)} {esc(title)}</b> will leave your library, search, People and collections.</p>'
+def clean_dialog(key="all"):
+    ids = [r.id for v in E.cleanup_groups(visible_rows(), S.kept).values() for r in v]
+    md(f'<div class="info"><p><b>{len(ids)} photo{"s" if len(ids) != 1 else ""}</b> will leave your library, search, People and collections.</p>'
        '<p><b>Your original files are not touched.</b> You can restore them from the Undo message or from Settings, Recently removed.</p></div>')
     c1, c2 = st.columns(2)
     with c1:
@@ -928,7 +965,7 @@ def clean_dialog(key):
         if st.button(f"Remove {len(ids)}", type="primary", key=f"cd_ok_{key}"):
             snap()
             S.removed.update(ids)
-            notify(f"Removed {len(ids)} {title}. Your originals are untouched.")
+            notify(f"Removed {len(ids)} photos. Your originals are untouched.")
             st.rerun()
 
 
@@ -936,30 +973,25 @@ def view_cleanup():
     appbar("Clean up")
     snack_ui()
     groups = E.cleanup_groups(visible_rows(), S.kept)
-    total = sum(len(v) for v in groups.values())
-    md(f'<div class="sub" style="margin-top:0;max-width:720px">{total} photo{"s" if total != 1 else ""} you may not need. PixelSense measures sharpness and size on this device, '
-       'then groups the likely clutter. Tap a photo to look closer. Nothing is removed until you confirm, and everything can be undone.</div>')
-    if not total:
-        empty_state("check", "All tidy", "No blurry, low-resolution or leftover screenshot photos to review.")
+    items = [r for v in groups.values() for r in v]
+    if not items:
+        empty_state("check", "All tidy", "No blurry, duplicate, unopened or leftover photos to review.")
         return
-    for key, (title, desc) in E.CLEAN_META.items():
-        items = groups[key]
-        if not items:
-            continue
-        md(f'<div class="sect"><b>{esc(title)}</b><span>{len(items)} photo{"s" if len(items) != 1 else ""}</span></div>'
-           f'<div class="sub" style="margin-top:0;padding-bottom:0">{esc(desc)}</div>')
-        image_grid(items, f"cu_{key}")
-        with st.container(key=f"cuact_{key}"):
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("Keep these", key=f"cu_keep_{key}"):
-                    snap()
-                    S.kept.update(r.id for r in items)
-                    notify(f"Kept {len(items)} photos. I will not suggest them again.")
-                    st.rerun()
-            with c2:
-                if st.button(f"Remove {len(items)}…", type="primary", key=f"cu_rm_{key}"):
-                    clean_dialog(key)
+    md(f'<div class="sect"><b>Photos you may not need</b><span>{len(items)} photo{"s" if len(items) != 1 else ""}</span></div>'
+       '<div class="sub" style="margin-top:0;padding-bottom:0">Blurry, low-resolution, near-duplicate, old screenshots and photos not opened in a year. '
+       'Measured on this device. Tap a photo to look closer. Nothing is removed without your consent.</div>')
+    image_grid(items, "cu_all")
+    with st.container(key="cuact_all"):
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Keep these", key="cu_keep_all"):
+                snap()
+                S.kept.update(r.id for r in items)
+                notify(f"Kept {len(items)} photos. I will not suggest them again.")
+                st.rerun()
+        with c2:
+            if st.button(f"Remove {len(items)}…", type="primary", key="cu_rm_all"):
+                clean_dialog()
 
 
 def view_memory():
@@ -970,6 +1002,353 @@ def view_memory():
     snack_ui()
     md(f'<div class="sub" style="margin-top:0">{len(m["items"])} photos from {m["date"].strftime("%A, %d %B %Y")}</div>')
     image_grid(sorted(m["items"], key=lambda r: r.id), "mm")
+
+
+# ---- needs attention (the core problem) -------------------------------------------------------------
+def mark_done(i, days_left):
+    snap()
+    S.done.add(i)
+    track("attention_done", days_left=days_left)
+    notify(f"Ticked off “{title_of(i)}”.")
+    st.rerun()
+
+
+def unmark_done(i):
+    snap()
+    S.done.discard(i)
+    track("attention_undo")
+    notify("Moved back to Needs attention.", False)
+    st.rerun()
+
+
+@st.dialog("Did you pay this?")
+def paid_dialog(i, days_left, money):
+    md(f'<div class="info"><p><b>Rs {money:,}</b> · {esc(title_of(i))}</p>'
+       '<p>PixelSense can’t check your bank, so it asks once before ticking a bill off. '
+       'If you tick it by mistake, tap Undo and it comes straight back.</p></div>')
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Not yet", key=f"pd_no_{i}"):
+            st.rerun()
+    with c2:
+        if st.button("Yes, I paid", type="primary", key=f"pd_yes_{i}"):
+            mark_done(i, days_left)
+
+
+def add_manual(title, d, money, kind, source, evidence=""):
+    snap()
+    S.manual_seq += 1
+    S.manual.append({"id": f"m{S.manual_seq}", "title": title.strip() or "Untitled deadline", "date": d.isoformat(), "money": money,
+                     "kind": kind, "source": source, "evidence": evidence})
+    track("attention_added", source=source)
+    notify(f"Added “{title.strip() or 'Untitled deadline'}”.")
+    st.rerun()
+
+
+@st.dialog("Add a deadline")
+def add_deadline_dialog():
+    md('<div class="sub" style="margin-top:0">Not everything starts as a photo. Type a deadline, or paste a message and PixelSense will find the date and amount.</div>')
+    tab1, tab2 = st.tabs(["Type it", "Paste a message"])
+    with tab1:
+        title = st.text_input("What is it?", key="md_title", placeholder="e.g. Rent, Viva, Visa renewal")
+        d = st.date_input("Date", value=date.today() + timedelta(days=7), key="md_date")
+        money = st.number_input("Amount in Rs (leave 0 if none)", min_value=0, step=500, key="md_money")
+        kind = st.selectbox("Type", ["Bill due", "Deadline", "Event"], key="md_kind")
+        if st.button("Add", type="primary", key="md_add"):
+            add_manual(title, d, int(money), kind, "typed")
+    with tab2:
+        txt = st.text_area("Paste an SMS, email or chat message", key="md_text", height=120, placeholder="Reminder: your rent of Rs 45,000 is due 1 Nov")
+        t2 = st.text_input("Name it (optional)", key="md_title2", placeholder="e.g. Rent")
+        if st.button("Find the date", type="primary", key="md_find"):
+            hit = E.parse_pasted(txt, date.today())
+            if not hit:
+                st.warning("I couldn’t find a date in that text, so I added nothing. Try the Type it tab.")
+            else:
+                token = re.search(r"\d{1,2}\s*(?:st|nd|rd|th)?\s+[A-Za-z]{3,}|[A-Za-z]{3,}\s+\d{1,2}", txt)
+                add_manual(t2 or txt.strip()[:40], hit["date"], hit["money"], hit["kind"], "pasted", E.snippet_of(txt, token.group(0)) if token else "")
+
+
+URG = {"overdue": ("Overdue", "bad"), "soon": ("This week", "warn"), "later": ("Later", "")}
+
+
+def attention_card(d):
+    r, i = d["row"], d["id"]
+    kind = URG[d["urgency"]][1]
+    thumb = f'<img class="att-thumb" src="{img_uri(r.file, 160, 120)}" alt="{esc(d["title"])}">' if r is not None else ""
+    proof = (f'Read from your photo: <i>{esc(d["evidence"])}</i>' if r is not None
+             else (f'Read from your pasted message: <i>{esc(d["evidence"])}</i>' if d["source"] == "pasted" else "Added by you"))
+    extra = f" · Rs {d['money']:,}" if d["money"] else ""
+    with st.container(key=f"att_{i}"):
+        md(f'<div class="att-row"><div class="dbadge{" urgent" if d["urgency"] != "later" else ""}"><b>{d["date"].day}</b><span>{d["date"].strftime("%b").upper()}</span></div>'
+           f'{thumb}'
+           f'<div class="att-body"><div class="rtitle">{esc(d["title"])}</div>'
+           f'<div class="ccount">{d["kind"]} {E.when_words(d["days"])}{extra}</div>'
+           f'<div class="att-proof">{proof}</div>'
+           f'<div class="pills">{pill(d["stakes"], "warn" if d["urgency"] != "later" and d["stakes"] != "Optional" else "gray")}'
+           f'{pill("You confirm it", "gray")}</div></div></div>')
+        with st.container(key=f"sm_att_{i}"):
+            c1, c2 = st.columns(2)
+            with c1:
+                if r is not None:
+                    if st.button("Open photo", key=f"att_open_{i}"):
+                        open_image(i)
+                elif st.button("Remove", key=f"att_rm_{i}"):
+                    snap()
+                    S.manual = [m for m in S.manual if m["id"] != i]
+                    notify("Deadline removed.")
+                    st.rerun()
+            with c2:
+                if st.button("Mark done", key=f"att_done_{i}", type="primary"):
+                    if d["money"]:
+                        paid_dialog(i, d["days"], d["money"])
+                    else:
+                        mark_done(i, d["days"])
+
+
+def attention_ui():
+    """Needs attention, shown on Home under Coming up (it is not a separate page)."""
+    live = deadline_items()
+    done = done_items()
+    money_soon = sum(d["money"] for d in live if d["money"] and d["days"] <= 14)
+    nxt = live[0] if live else None
+    md('<div class="sect" style="margin-top:6px"><b>Coming up</b></div>')
+    if live:
+        hero = (f'<div class="att-hero glass"><div><div class="ah-n">{len(live)}</div><div class="ah-l">need{"s" if len(live) == 1 else ""} you</div></div>'
+                f'<div class="ah-sep"></div><div><div class="ah-n">Rs {money_soon:,}</div><div class="ah-l">due in the next 14 days</div></div>'
+                f'<div class="ah-sep"></div><div><div class="ah-n">{nxt["date"].day} {nxt["date"].strftime("%b")}</div><div class="ah-l">next: {esc(nxt["title"])}</div></div></div>')
+        md(hero)
+    else:
+        empty_state("check", "You’re clear", "Nothing due. Every bill and deadline found in your photos is ticked off.")
+    for key in ("overdue", "soon", "later"):
+        grp = [d for d in live if d["urgency"] == key]
+        if grp:
+            md(f'<div class="sect"><b>{URG[key][0]}</b><span>{len(grp)} item{"s" if len(grp) != 1 else ""}</span></div>')
+            for d in grp:
+                attention_card(d)
+    if done:
+        md(f'<div class="sect"><b>Done</b><span>{len(done)}</span></div>')
+        for d in done:
+            with st.container(key=f"att_done_row_{d['id']}"):
+                c1, c2 = st.columns([4, 2])
+                with c1:
+                    md(f'<div class="crow" style="padding:2px 0">{svg("check", 22, "#18936A")}<div class="rtitle" style="font-size:14px">{esc(d["title"])}</div></div>')
+                with c2:
+                    with st.container(key=f"sm_undo_{d['id']}"):
+                        if st.button("Undo", key=f"att_undo_{d['id']}"):
+                            unmark_done(d["id"])
+    md('<div class="sub" style="margin-top:14px;max-width:720px">Why “Done” is your word: PixelSense can’t see your bank or your university portal, and it never pretends to. '
+       'It asks once before ticking off a payment, and every tick can be undone.</div>')
+
+
+# ---- why PixelSense: the problem and the loopholes -------------------------------------------------
+LOOPHOLES = [
+    ("Ask people to type their own reminders", "Nobody keeps it up. Entering a date by hand is the very effort that made them take a photo instead.",
+     "PixelSense reads the date and amount from the photo and shows the exact words it used as proof."),
+    ("Reward people for staying on top (scores, streaks)", "People game it: tick everything without doing it, or delete photos just to look tidy.",
+     "Progress counts things you have <b>reviewed</b>. Keep and Remove count the same, removal is undoable, and bills ask “Did you pay?” once."),
+    ("Make identity checks stronger (face scan, biometrics)", "Strongest proof, highest cost: expensive, and a photo library is the most private place there is.",
+     "The weakest check that works. Face groups are opt-in, on this device, named by you, with no biometric template. Private-looking photos start with AI paused."),
+    ("Let cloud AI read everything", "Works well, but your bills and private messages leave your device.",
+     "Everything runs on this device. You can pause AI per collection or per photo. Nothing is sent anywhere."),
+    ("Track usage to improve the app", "Hidden tracking and third-party analytics break trust.",
+     "Analytics is off by default, stored on this device, readable line by line, and has no third party."),
+]
+
+
+def view_about():
+    if S.get("about_from") == "welcome":
+        topbar("Why PixelSense", "welcome", "about")
+    else:
+        appbar("Why PixelSense")
+    md('<div class="about-hero glass"><div class="lbl">The problem</div>'
+       '<div class="about-h">Important information gets trapped inside photos.</div>'
+       '<p>People screenshot a bill, a deadline notice or a poster “to deal with later”, then lose it among thousands of images. '
+       'The cost is real: late fees, missed submissions, and minutes of scrolling to find one date.</p>'
+       f'<div class="pills" style="margin-top:12px">{pill("Who: students and busy households", "")}{pill("Success: deadlines acted on before they pass", "good")}</div></div>')
+    md('<div class="sect" style="margin-top:20px"><b>Every fix has a loophole</b><span>how each choice was made</span></div>'
+       '<div class="sub" style="margin-top:0;max-width:720px">A design is only finished when you have asked how someone could misuse it, and what the stronger fix would cost. '
+       'This is that thinking, one row per idea.</div>')
+    for fix, hole, ans in LOOPHOLES:
+        md(f'<div class="card pad glass loop"><div class="lp-a"><span>Idea</span><b>{fix}</b></div>'
+           f'<div class="lp-b"><span>Loophole or cost</span><p>{hole}</p></div>'
+           f'<div class="lp-c"><span>What PixelSense does</span><p>{ans}</p></div></div>')
+    md('<div class="sect" style="margin-top:20px"><b>How it is built</b></div>'
+       '<div class="card pad glass info"><p><b>Information architecture.</b> Home (what needs me now) · Ask (find anything) · Photos, People, Collections (browse) · Clean up (maintain) · Settings and Your data (control). '
+       'Frequent tasks sit one tap from Home, and rare or risky ones sit in Settings.</p>'
+       '<p><b>Visual language.</b> A Liquid Glass style: translucent layers that let content show through, large rounded shapes that nest, one type family on a clear scale, and an 8-point spacing grid. '
+       'Navigation floats above content and the prompt bar floats below it, so photos stay the hero.</p>'
+       '<p><b>Data.</b> System data, user data, references, cookies and analytics are each shown in Settings, Your data, with what they are and who controls them.</p>'
+       '<p><b>What it does not cover.</b> A deadline that never became a photo is only caught if you add it (type it, or paste the message). “Done” is your word. In this prototype the AI is simulated with prepared data.</p></div>')
+
+
+# ---- study mode (evaluation kit, researcher-facing) ----------------------------------------------------
+def study_tasks():
+    return [t for t in ST.TASKS if S.study["cond"] in t[5]]
+
+
+@st.dialog("Task finished")
+def finish_dialog():
+    sd = S.study
+    t = study_tasks()[sd["i"]]
+    md(f'<div class="info"><p><b>{esc(t[0])} · {esc(t[2])}</b></p><p>Success looks like: {esc(t[4])}</p></div>')
+    success = st.radio("Did the participant succeed?", ["Yes", "Partly", "No or gave up"], key="fd_success", horizontal=True)
+    errors = st.number_input("Errors you observed (wrong taps, wrong results used, going back)", min_value=0, step=1, key="fd_errors")
+    notes = st.text_area("Quotes or observations (think-aloud)", key="fd_notes", height=90)
+    if st.button("Save and continue", type="primary", key="fd_save"):
+        ST.log_task(participant=sd["pid"], condition=sd["cond"], task_id=t[0], rq=t[1], seconds=round(time.time() - sd["t0"], 1), success=success,
+                    errors=int(errors), undos=sd.get("undos", 0), screens_visited=sd.get("nav", 0), notes=notes.replace("\n", " "))
+        sd["logs"].append({"task": t[0], "seconds": round(time.time() - sd["t0"], 1), "success": success})
+        sd["i"] += 1
+        sd["running"] = False
+        S.view = "study"
+        st.rerun()
+
+
+def study_bar():
+    sd = S.study
+    n = len(study_tasks())
+    t = study_tasks()[sd["i"]]
+    md("<style>[data-testid='stMainBlockContainer']{padding-top:92px!important}</style>")
+    with st.container(key="studybar"):
+        md(f'<div class="sb-t"><span>Task {sd["i"] + 1} of {n}</span><b>{esc(t[3])}</b></div>')
+        if st.button("I’m finished", key="sb_done", type="primary"):
+            finish_dialog()
+
+
+@st.dialog("Photo", width="large")
+def baseline_open(i):
+    st.image(str(ROOT / R[i].file), caption=f"Taken {R[i].taken}")
+
+
+def view_baseline():
+    """The comparison condition: an ordinary gallery. A date-sorted grid, open a photo, select and delete. No search, no suggestions, no assistant."""
+    md('<div class="h1" style="font-size:28px;font-weight:700;margin-bottom:8px">Gallery</div>')
+    rows = sorted([r for r in df.itertuples() if arrived_ok(r) and r.id not in S.removed], key=lambda r: r.taken, reverse=True)
+    picked = [r.id for r in rows if S.get(f"bl_sel_{r.id}")]
+    with st.container(key="sm_bl"):
+        if st.button(f"Delete selected ({len(picked)})", key="bl_del", disabled=not picked, type="primary"):
+            S.removed.update(picked)
+            for i in picked:
+                S.pop(f"bl_sel_{i}", None)
+            st.rerun()
+    with st.container(key="grid4_bl"):
+        for k in range(0, len(rows), 4):
+            cols = st.columns(4)
+            for c, r in zip(cols, rows[k:k + 4]):
+                with c:
+                    md(f'<img class="att-thumb" style="width:100%;height:auto;aspect-ratio:4/3;flex:none" src="{img_uri(r.file, 360, 270)}" alt="Photo from {r.taken}">'
+                       f'<div class="ccount" style="margin:2px 0 4px">{r.taken}</div>')
+                    st.checkbox("Select", key=f"bl_sel_{r.id}")
+                    if st.button("Open", key=f"bl_open_{r.id}"):
+                        baseline_open(r.id)
+
+
+def view_study():
+    appbar("Study mode")
+    snack_ui()
+    sd = S.study
+    md('<div class="sub" style="margin-top:0;max-width:720px"><b>Researcher screen.</b> One session is one participant in one condition. Run the app twice per participant '
+       '(PixelSense and Gallery baseline) in counterbalanced order. Data is saved to <b>study_data/</b> as you go.</div>')
+    if not sd:
+        study_setup()
+    elif sd["step"] == "tasks":
+        study_tasks_ui()
+    elif sd["step"] == "survey":
+        study_survey()
+    else:
+        study_done()
+
+
+def study_setup():
+    md(f'<div class="card pad glass info"><p><b>Information and consent</b></p><p>{esc(ST.CONSENT)}</p></div>')
+    pid = st.text_input("Participant number", key="st_pid", placeholder="P01")
+    if pid.strip():
+        st.caption(f"Counterbalanced order: {pid.strip()} starts with {ST.counterbalance(pid.strip())}.")
+    cond = st.radio("Condition for this session", ST.CONDITIONS, key="st_cond", horizontal=True)
+    ok = st.checkbox("The participant has read the information above and agrees to take part.", key="st_consent")
+    with st.container(key="sm_stb"):
+        if st.button("Begin session", type="primary", key="st_begin", disabled=not (pid.strip() and ok)):
+            S.study = dict(step="tasks", pid=pid.strip(), cond=cond, i=0, running=False, logs=[], nav=0, undos=0)
+            st.rerun()
+
+
+def study_tasks_ui():
+    sd = S.study
+    tasks = study_tasks()
+    md(f'<div class="sect"><b>{esc(sd["pid"])} · {esc(sd["cond"])}</b><span>{sd["i"]} of {len(tasks)} tasks done</span></div>')
+    done = {l["task"]: l for l in sd["logs"]}
+    for n, t in enumerate(tasks):
+        d = done.get(t[0])
+        state = f'{d["success"]} · {d["seconds"]} s' if d else ("Next" if n == sd["i"] else "Waiting")
+        md(f'<div class="card pad glass crow" style="margin-bottom:8px"><div style="flex:1"><div class="rtitle">{esc(t[0])} · {esc(t[2])} <span class="pill gray">{esc(t[1])}</span></div>'
+           f'<div class="ccount">Read aloud: “{esc(t[3])}”</div><div class="att-proof">Success: {esc(t[4])}</div></div>{pill(state, "good" if d else "")}</div>')
+    with st.container(key="sm_stb"):
+        if sd["i"] < len(tasks):
+            if st.button(f"Start task {sd['i'] + 1}", type="primary", key="st_start"):
+                sd.update(running=True, t0=time.time(), nav=0, undos=0)
+                S.view = "home" if sd["cond"] == "PixelSense" else "baseline"
+                st.rerun()
+        elif st.button("Continue to questionnaires", type="primary", key="st_to_survey"):
+            sd["step"] = "survey"
+            st.rerun()
+        if st.button("Abort session (keeps data already saved)", key="st_abort"):
+            S.update(fresh_state())
+            S.view = "study"
+            st.rerun()
+
+
+def study_survey():
+    sd = S.study
+    lab = {1: "1 · Strongly disagree", 5: "5 · Strongly agree"}
+    md('<div class="sub" style="margin-top:0">Hand the screen to the participant. All questions are required.</div>')
+    with st.form("survey_form"):
+        md('<div class="sect"><b>System Usability Scale</b></div>')
+        sus = [st.radio(f"{i + 1}. {q}", [1, 2, 3, 4, 5], index=None, horizontal=True, format_func=lambda v: lab.get(v, str(v)), key=f"sus_{i}") for i, q in enumerate(ST.SUS_ITEMS)]
+        md('<div class="sect"><b>Workload (NASA-TLX)</b></div>')
+        tlx = {k: st.slider(f"{name}. {q}", 0, 100, 50, 5, key=f"tlx_{k}") for k, name, q in ST.TLX_ITEMS}
+        ueq, trust = [None] * 8, [None] * 3
+        if sd["cond"] == "PixelSense":
+            md('<div class="sect"><b>Experience (UEQ-S)</b></div><div class="sub" style="margin-top:0">Pick the point between the two words that matches your impression.</div>')
+            ueq = [st.radio(f"{a}  ←→  {b}", [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"ueq_{i}") for i, (a, b) in enumerate(ST.UEQ_S)]
+            md('<div class="sect"><b>Trust and control</b></div><div class="sub" style="margin-top:0">1 = strongly disagree, 7 = strongly agree.</div>')
+            trust = [st.radio(q, [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"trust_{i}") for i, q in enumerate(ST.TRUST_ITEMS)]
+        md('<div class="sect"><b>Interview</b></div>')
+        notes = st.text_area("Researcher notes and quotes: what worked, what confused them, would they use it?", key="iv_notes", height=120)
+        submitted = st.form_submit_button("Save answers", type="primary")
+    if submitted:
+        if None in sus or None in ueq or None in trust:
+            st.warning("Please answer every question.")
+            return
+        row = dict(participant=sd["pid"], condition=sd["cond"], sus_score=ST.sus_score(sus), tlx_raw=ST.tlx_raw(tlx), interview_notes=notes.replace("\n", " "))
+        row.update({f"sus_{i + 1}": v for i, v in enumerate(sus)})
+        row.update({f"tlx_{k}": v for k, v in tlx.items()})
+        if sd["cond"] == "PixelSense":
+            row.update({f"ueq_{i + 1}": v for i, v in enumerate(ueq)})
+            row["ueq_pragmatic"], row["ueq_hedonic"] = ST.ueq_scores(ueq)
+            row.update({f"trust_{i + 1}": v for i, v in enumerate(trust)})
+        ST.log_questionnaire(**row)
+        sd["scores"] = row
+        sd["step"] = "done"
+        st.rerun()
+
+
+def study_done():
+    sd = S.study
+    sc = sd["scores"]
+    md(f'<div class="card pad glass info"><p><b>Session saved for {esc(sd["pid"])} · {esc(sd["cond"])}.</b></p>'
+       f'<p>SUS {sc["sus_score"]} (about 68 is average) · NASA-TLX raw {sc["tlx_raw"]}'
+       + (f' · UEQ-S pragmatic {sc["ueq_pragmatic"]}, hedonic {sc["ueq_hedonic"]}' if "ueq_pragmatic" in sc else "") + '</p></div>')
+    with st.container(key="sm_dl"):
+        c1, c2, _sp = st.columns([1, 1, 1])
+        with c1:
+            st.download_button("Download tasks.csv", ST.read_csv_bytes("tasks.csv"), file_name="tasks.csv", mime="text/csv", key="dl_tasks")
+        with c2:
+            st.download_button("Download questionnaires.csv", ST.read_csv_bytes("questionnaires.csv"), file_name="questionnaires.csv", mime="text/csv", key="dl_q")
+    with st.container(key="sm_stb"):
+        if st.button("Start next session", type="primary", key="st_next"):
+            S.update(fresh_state())
+            S.view = "study"
+            st.rerun()
 
 
 # ---- photos timeline ----------------------------------------------------------------------------------
@@ -996,7 +1375,7 @@ def view_photos():
         d = E.taken_date(r)
         groups.setdefault((d.year, d.month) if d else (0, 0), []).append(r)
     for (y, mo), items in groups.items():
-        label = f"{E.MONTHS[mo - 1].title()} {y}" if y else "Undated"
+        label = date(y, mo, 1).strftime("%B %Y") if y else "Undated"
         md(f'<div class="monthh"><b>{label}</b><span>{len(items)} photo{"s" if len(items) != 1 else ""}</span></div>')
         image_grid(items, f"t{y}{mo}")
 
@@ -1022,12 +1401,12 @@ def view_people():
            '<p>PixelSense finds faces and puts the same person together, so you can open one face and see every photo of them.</p>'
            '<p><b>You stay in control:</b> you name people, you can hide anyone, and you can turn this off and forget names at any time in Settings.</p>'
            '<p style="color:#8A8EA8;font-size:12.5px">In this prototype faces are prepared in advance. Nothing is recognised live and nothing leaves this device.</p></div>')
-        if st.button("Turn on face groups", type="primary", key="faces_on"):
-            S.faces_on = True
-            notify("Face groups are on. Tap a face to see every photo of that person.", False)
-            st.rerun()
-        if not off:
-            with st.container(key="plain_notnow"):
+        with st.container(key="consent_btns"):
+            if st.button("Turn on face groups", type="primary", key="btn_faces_on"):
+                S.faces_on = True
+                notify("Face groups are on. Tap a face to see every photo of that person.", False)
+                st.rerun()
+            if not off:
                 if st.button("Not now", key="faces_notnow"):
                     S.faces_on = False
                     st.rerun()
@@ -1328,6 +1707,74 @@ def restore_image(i):
     st.rerun()
 
 
+def user_data_snapshot():
+    """Everything the person has created or decided in this session (what 'Download my data' exports)."""
+    return {"names": S.names, "hidden_people": sorted(S.hidden_people), "favourites": sorted(S.fav), "collections_made": S.extra_cats,
+            "moved_photos": S.override, "removed": sorted(S.removed), "ai_paused_collections": sorted(S.excluded_cats),
+            "ai_paused_photos": sorted(S.excluded_imgs), "ticked_off": sorted(S.done), "edited_copies": [{"id": c["id"], "original": c["src"]} for c in S.copies],
+            "recent_searches": S.searches}
+
+
+def acted_early():
+    """The one number that says whether the app solves its problem: ticked off with days to spare."""
+    ticks = [e for e in S.events if e["event"] == "attention_done"]
+    return (sum(1 for e in ticks if e.get("days_left", 0) >= 0), len(ticks))
+
+
+def your_data_ui():
+    md('<div class="sect" style="margin-top:16px"><b>Your data</b></div>'
+       '<div class="sub" style="margin-top:0;max-width:720px">Every app holds five kinds of data. Here is what PixelSense keeps in each, where it lives, and who is in control.</div>')
+    ud = user_data_snapshot()
+    n_user = sum(len(v) for v in ud.values())
+    live = {"system": f"{len(df)} items · {len(E.FACES)} face boxes", "user": f"{n_user} saved choice{'' if n_user == 1 else 's'}",
+            "refs": f"{len(S.copies)} edited copies · {len(S.removed)} removed, originals untouched", "cookies": "0 cookies · 0 tracking ids",
+            "analytics": f"{'ON' if S.analytics_on else 'OFF'} · {len(S.events)} events logged"}
+    icons = {"system": "folder", "user": "user", "refs": "image", "cookies": "shield", "analytics": "clock"}
+    for key, title, what, where, control in AN.DATA_MAP:
+        md(f'<div class="card pad glass dmap"><span class="si">{svg(icons[key], 20)}</span><div style="flex:1;min-width:0">'
+           f'<div class="dm-t"><b>{title}</b><em>{live[key]}</em></div><p>{what}</p>'
+           f'<div class="dm-m"><span>Where</span> {where}<span style="margin-left:14px">Control</span> {control}</div></div></div>')
+    with st.container(key="sm_dl"):
+        c1, c2, _sp = st.columns([1, 1, 2])
+        with c1:
+            st.download_button("Download my data", AN.export_json(ud, S.events, S.analytics_on), file_name="pixelsense_my_data.json",
+                               mime="application/json", key="dl_data")
+        with c2:
+            with st.container(key="danger_erase"):
+                if st.button("Erase my data", key="erase_data"):
+                    S.update(fresh_state())
+                    S.view = "settings"
+                    st.rerun()
+    md('<div class="sect" style="margin-top:12px"><b>Help improve PixelSense</b></div>'
+       '<div class="sub" style="margin-top:0;max-width:720px">Optional. Records <b>which screens you open and how often you tick things off</b>, so we can tell whether the app really helps people act before a deadline. '
+       'It never records photos, search words or names. It stays on this device, and you can read and erase every line.</div>')
+    with st.container(key="sm_ana"):
+        if S.analytics_on:
+            if st.button("Turn off analytics", key="ana_off"):
+                S.analytics_on = False
+                notify("Analytics is off. Nothing more is recorded.", False)
+                st.rerun()
+        elif st.button("Turn on analytics", key="ana_on", type="primary"):
+            S.analytics_on = True
+            track("screen_open", screen="settings")
+            notify("Analytics is on. You can read every line below.", False)
+            st.rerun()
+    if S.analytics_on:
+        early, tot = acted_early()
+        summ = AN.summarise(S.events)
+        md(f'<div class="card pad glass info"><p><b>Is it solving the problem?</b> {early} of {tot} ticked-off items were handled before their date.</p>'
+           + "".join(f'<p style="margin:2px 0"><span class="pill gray">{n}</span> {esc(AN.ALLOWED[k])}</p>' for k, n in summ.items())
+           + '</div>')
+        if S.events:
+            with st.expander("Read the raw log (last 15 lines)"):
+                st.code("\n".join(" · ".join(f"{k}={v}" for k, v in e.items()) for e in S.events[-15:]), language=None)
+            with st.container(key="sm_anaclr"):
+                if st.button("Erase analytics log", key="ana_clear"):
+                    S.events = []
+                    notify("Analytics log erased.", False)
+                    st.rerun()
+
+
 def view_settings():
     appbar("Settings")
     md('<div class="sub" style="margin-top:6px">Privacy, face groups and what AI is allowed to see.</div>')
@@ -1409,9 +1856,9 @@ def view_settings():
     else:
         md('<div class="sub" style="margin-top:0">Nothing removed. Use Remove photo on a photo’s details.</div>')
 
-    md('<div class="sect" style="margin-top:16px"><b>How your data is handled</b></div>'
-       '<div class="card pad info"><p><b>Answers.</b> The assistant answers from descriptions and text prepared for each photo. It does not generate facts, and every answer shows the photo it came from and how it was found.</p>'
-       '<p><b>Faces.</b> Face groups are prepared in advance for this prototype. Nothing is recognised live. You name people, hide anyone, and can turn the feature off.</p>'
+    md('<div class="sect" style="margin-top:16px"><b>Plain-language promises</b></div>'
+       '<div class="card pad glass info"><p><b>Answers.</b> The assistant answers from descriptions and text prepared for each photo. It does not generate facts, and every answer shows the photo it came from and how it was found.</p>'
+       '<p><b>Faces.</b> Face groups are prepared in advance for this prototype. Nothing is recognised live. You name people, hide anyone, and can turn the feature off. No biometric template is stored.</p>'
        '<p><b>Sorting.</b> Collections are made by simple rules, not a live image model, and nothing is sent to outside services.</p>'
        '<p><b>Originals.</b> PixelSense never edits, moves, deletes or shares your original photos.</p></div>')
 
@@ -1443,7 +1890,7 @@ def view_settings():
         md('<div class="sub" style="margin-top:0">Chat works offline with built-in replies and editing commands. For free conversation, set the ANTHROPIC_API_KEY environment variable, run <b>pip install anthropic</b>, then restart the app.</div>')
 
     md('<div class="sect" style="margin-top:16px"><b>Researcher tools</b></div>'
-       '<div class="sub" style="margin-top:0">Simulate new photos arriving, or reset everything so the next participant starts fresh.</div>')
+       '<div class="sub" style="margin-top:0">Open study mode to run an evaluation session, simulate new photos arriving, or reset everything so the next participant starts fresh.</div>')
     with st.container(key="sm_arrive"):
         if st.button("Simulate 3 new photos arriving", key="arrive", disabled=len(S.arrived) == len(HELD)):
             S.arrived = set(HELD)
@@ -1451,6 +1898,9 @@ def view_settings():
             cats = sorted({cat_of(R[i]) for i in live})
             notify(f"{len(HELD)} new photos arrived. " + (f"{len(live)} sorted into {', '.join(cats)}." if live else "AI is paused for them."), False)
             st.rerun()
+    with st.container(key="sm_study"):
+        if st.button("Open study mode", key="open_study"):
+            go("study")
     with st.container(key="danger_reset"):
         if st.button("Reset prototype", key="reset"):
             for k in list(S.keys()):
@@ -1494,7 +1944,7 @@ def composer():
 
 
 def nav_to(key):
-    S.menu = False
+    S.menu, S.about_from = False, None
     if key == "favorites":
         S.hfilter = "Favorites"
         go("photos")
@@ -1518,6 +1968,7 @@ def drawer():
     if cur == "photos" and S.hfilter == "Favorites":
         cur = "favorites"
     n_clean = sum(len(v) for v in E.cleanup_groups(visible_rows(), S.kept).values())
+    n_att = len(deadline_items())
     items = [("home", "Home", "home", ""), ("chat", "Ask PixelSense", "sparkle", ""), ("photos", "Photos", "image", ""), ("people", "People", "users", ""),
              ("collections", "Collections", "folder", ""), ("cleanup", "Clean up", "trash", f"{n_clean}" if n_clean else ""), ("favorites", "Favorites", "heart", f"{len(S.fav)}" if S.fav else ""),
              ("settings", "Settings", "shield", "")]
@@ -1531,15 +1982,20 @@ def drawer():
 
 
 # --------------------------------------------------------------------------- router
-VIEWS = {"edit": view_edit, "home": view_home, "cleanup": view_cleanup, "memory": view_memory, "welcome": view_welcome, "analysing": view_analysing, "chat": view_chat, "photos": view_photos,
+VIEWS = {"study": view_study, "baseline": view_baseline, "edit": view_edit, "home": view_home, "cleanup": view_cleanup, "memory": view_memory, "welcome": view_welcome, "analysing": view_analysing, "chat": view_chat, "photos": view_photos,
          "results": view_results, "people": view_people, "person": view_person, "detail": view_detail,
          "collections": view_collections, "collection": view_collection, "settings": view_settings}
+if S.study and S.study.get("running") and S.study["cond"] != "PixelSense":
+    S.view = "baseline"                  # the baseline condition is a plain gallery with no assistant and no navigation
 with st.container(key=f"v_{S.view}"):
     VIEWS.get(S.view, view_chat)()
+if S.study and S.study.get("running"):
+    study_bar()
 
-if S.view in ("home", "chat", "photos", "results", "people", "person", "collections", "collection", "cleanup", "memory"):
+if S.view in ("chat", "results"):      # prompt bar lives on the Ask screen only
     composer()
-drawer()
+if S.view != "baseline":
+    drawer()
 
 if S.scroll:
     mode, S.scroll = S.scroll, False

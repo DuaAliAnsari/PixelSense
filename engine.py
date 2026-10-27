@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Callable
 
@@ -451,23 +451,81 @@ LOWRES_BELOW = 0.05  # megapixels
 CLEAN_META = {
     "blurry": ("Blurry photos", "Out of focus or too soft to read. The sharpness score is far below your other photos."),
     "lowres": ("Low-resolution photos", "Very small files. They look pixelated when opened full size."),
+    "dupes": ("Near-duplicates", "Almost identical shots taken the same day. The sharpest one of each set stays out of this list."),
     "shots": ("Screenshots you may not need", "Chats, listings and other screenshots that are usually temporary."),
+    "unopened": ("Not opened in over a year", "Photos you have not looked at for more than 12 months."),
 }
+
+OPENED: set = set()          # photos opened in this session (kept in step by the app, like edited copies)
+UNOPENED_DAYS = 365
+PEOPLE_WORDS = re.compile(r"family|friends?|cousins?|people|couple|selfie|father|mother|daughter|son|guests?|wedding|portrait|crowd|group", re.I)
+
+
+def sync_opened(s):
+    OPENED.clear()
+    OPENED.update(s)
+
+
+def dhash(file, n=16):
+    """Difference hash: a 256-bit fingerprint of the picture's light/dark structure. Real, computed on the file."""
+    im = Image.open(ROOT / file).convert("L").resize((n + 1, n))
+    a = np.asarray(im, dtype=float)
+    return (a[:, 1:] > a[:, :-1]).flatten()
+
+
+_hash_cache: dict = {}
+
+
+def _hash(file):
+    if file not in _hash_cache:
+        _hash_cache[file] = dhash(file)
+    return _hash_cache[file]
+
+
+def duplicate_ids(rows, max_dist=56):
+    """Photos that are near-copies of a sharper photo taken within a day. Only real photos are compared
+    (flat screenshots and bills look alike to a hash). The sharpest in each set is never listed."""
+    ph = sorted([r for r in rows if r.type == "photo"], key=lambda r: -quality(r.file)["sharp"])
+    keep, flagged = [], set()
+    for r in ph:
+        h = _hash(r.file)
+        match = next((k for k in keep if abs((pd.to_datetime(k.taken) - pd.to_datetime(r.taken)).days) <= 1
+                      and int((h != _hash(k.file)).sum()) <= max_dist), None)
+        if match:
+            flagged.add(r.id)
+        else:
+            keep.append(r)
+    return flagged
+
+
+def has_people(r):
+    """Someone is in the photo if a face box exists or its description names people (prepared data, not a live detector)."""
+    return r.id in FACES_IN or bool(PEOPLE_WORDS.search(r.description))
 
 
 def cleanup_groups(rows, kept=()):
-    """Group the photos the AI may use into clean-up suggestions. A photo is suggested in one group only."""
+    """Group the photos the AI may use into clean-up suggestions. A photo is suggested in one group only,
+    by this priority: blurry, low-res, near-duplicate, screenshot, not opened in a year."""
     out = {k: [] for k in CLEAN_META}
+    rows = list(rows)
+    dupes = duplicate_ids(rows)
+    today = date.today()
     for r in rows:
         if r.id in kept:
             continue
         q = quality(r.file)
+        lo = getattr(r, "last_opened", "")
+        stale = bool(lo) and (today - pd.to_datetime(lo).date()).days > UNOPENED_DAYS and r.id not in OPENED
         if q["sharp"] < BLUR_BELOW:
             out["blurry"].append(r)
         elif q["mp"] < LOWRES_BELOW:
             out["lowres"].append(r)
+        elif r.id in dupes:
+            out["dupes"].append(r)
         elif r.type == "screenshot":
             out["shots"].append(r)
+        elif stale:
+            out["unopened"].append(r)
     return out
 
 
@@ -571,3 +629,95 @@ def llm_reply(ctx, history, q):
                      steps=["Answered by an AI model using only the text descriptions of photos the AI may use. No images were sent."])
     except Exception:
         return None
+
+
+# --------------------------------------------------------------------------- "Needs attention" (the core problem)
+def deadlines(rows, today):
+    """Every dated obligation found in the text inside photos, with urgency.
+
+    PROBLEM THIS SOLVES: people photograph or screenshot bills, notices and event posters, then never look at
+    them again, so they miss due dates and pay late fees. Typing reminders by hand is effort nobody keeps up,
+    so PixelSense reads the date and amount for them. Each item is a *suggestion* the user confirms.
+    Real parsing, on prepared in-image text (see manifest.csv).
+    """
+    out = []
+    for r in rows:
+        if r.type not in ("bill", "screenshot", "document"):
+            continue
+        t = r.visible_text
+        m = re.search(r"(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)", t)
+        kind = next((k for w, k in (("due", "Bill due"), ("deadline", "Deadline"), ("fest", "Event")) if w in t.lower()), None)
+        if not (m and kind):
+            continue
+        d = datetime.strptime(f"{m.group(1)} {m.group(2)} {today.year}", "%d %b %Y").date()
+        days = (d - today).days
+        if days < -180:           # a date this far back is almost certainly next year's
+            d = d.replace(year=today.year + 1)
+            days = (d - today).days
+        amt = re.search(r"Rs\.?\s?[\d,]+", t)
+        money = int(re.sub(r"\D", "", amt.group(0))) if amt else 0
+        # what does it cost to ignore this? bills cost money, deadlines cost marks, events cost nothing but the chance
+        stakes = {"Bill due": "Late fee risk", "Deadline": "Missed submission", "Event": "Optional"}[kind]
+        urgency = "overdue" if days < 0 else "soon" if days <= 7 else "later"
+        out.append({"id": r.id, "row": r, "title": r.description, "source": "photo", "kind": kind, "date": d, "days": days, "money": money,
+                    "stakes": stakes, "urgency": urgency, "evidence": snippet_of(t, m.group(0))})
+    return sorted(out, key=lambda x: x["days"])
+
+
+def snippet_of(text, token):
+    """The exact words in the photo the date was read from (shown as proof, so the user can check it)."""
+    i = text.find(token)
+    a, b = max(0, i - 28), min(len(text), i + len(token) + 28)
+    if a:                                   # start and end on whole words, never mid-word
+        a = text.find(" ", a) + 1 or a
+    if b < len(text):
+        b = text.rfind(" ", i + len(token), b) if text.rfind(" ", i + len(token), b) > 0 else b
+    return ("…" if a else "") + text[a:b].strip() + ("…" if b < len(text) else "")
+
+
+def when_words(days):
+    if days < 0:
+        return f"{-days} day{'s' if days != -1 else ''} ago"
+    return "today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days"
+
+
+MONTHS = "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
+
+
+def parse_pasted(text, today):
+    """Find a date and an amount in pasted text (an SMS, an email, a chat message). Same idea as reading a photo,
+    but for deadlines that never became a picture. Returns None when no date is found, so nothing is guessed."""
+    m = re.search(rf"(\d{{1,2}})\s*(?:st|nd|rd|th)?\s+({MONTHS})[a-z]*", text, re.I) or None
+    day = mon = None
+    if m:
+        day, mon = int(m.group(1)), m.group(2)
+    else:
+        m2 = re.search(rf"({MONTHS})[a-z]*\s+(\d{{1,2}})", text, re.I)
+        if m2:
+            mon, day = m2.group(1), int(m2.group(2))
+    if not day:
+        return None
+    try:
+        d = datetime.strptime(f"{day} {mon.title()} {today.year}", "%d %b %Y").date()
+    except ValueError:
+        return None
+    if (d - today).days < -180:
+        d = d.replace(year=today.year + 1)
+    amt = re.search(r"(?:Rs\.?|PKR|\$)\s?[\d,]+", text)
+    money = int(re.sub(r"\D", "", amt.group(0))) if amt else 0
+    low = text.lower()
+    kind = "Bill due" if ("due" in low or money) else "Deadline" if "deadline" in low or "submit" in low else "Event"
+    return {"date": d, "money": money, "kind": kind}
+
+
+def manual_deadlines(items, today):
+    """Turn the deadlines a person typed or pasted into the same shape as ones read from photos."""
+    out = []
+    for m in items:
+        d = date.fromisoformat(m["date"])
+        days = (d - today).days
+        stakes = {"Bill due": "Late fee risk", "Deadline": "Missed submission", "Event": "Optional"}[m["kind"]]
+        out.append({"id": m["id"], "row": None, "title": m["title"], "source": m["source"], "kind": m["kind"], "date": d, "days": days,
+                    "money": m["money"], "stakes": stakes, "urgency": "overdue" if days < 0 else "soon" if days <= 7 else "later",
+                    "evidence": m.get("evidence", "")})
+    return out
