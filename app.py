@@ -30,7 +30,7 @@ ROOT = Path(__file__).parent
 st.set_page_config(page_title="PixelSense", page_icon="✦", layout="wide", initial_sidebar_state="collapsed")
 st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)
 
-TYPE_FILTERS = ["All", "Photo", "Screenshot", "Receipt", "Bill", "Ticket", "Document"]
+TYPE_FILTERS = ["All", "Camera", "Screenshots", "WhatsApp images"]
 TILE_COLORS = [("#EEEBFF", "#5B4FD6"), ("#FFE9EC", "#D6455D"), ("#E3F6EC", "#18936A"),
                ("#FFF1D6", "#C27A00"), ("#E1F1FF", "#2A7DD1"), ("#F3E8FF", "#9333EA")]
 HOME_CHIPS = {
@@ -101,13 +101,15 @@ def fresh_state():
         view="welcome", back="chat", query="", rfilter="All", hfilter="All", sel=None, cur_coll=None, cur_person=None,
         override={}, extra_cats=[], excluded_cats={"Sensitive"}, excluded_imgs=set(), removed=set(), arrived=set(),
         names={}, hidden_people=set(), notp=set(), faces_on=None, fav=set(), kept=set(), cur_mem=None, copies=[], copy_seq=0, llm_on=False,
-        history=[], searches=[], snack=None, scroll=False, menu=False, plus=False, chat=[], res=None,
+        history=[], searches=[], snack=None, scroll=False, menu=False, plus=False, chat=[], res=None, last_ids=[], llm_hist=[],
+        last_accessed={},
     )
 
 
 if "boot" not in S:
     S.update(fresh_state())
     S.boot = True
+S.setdefault("last_accessed", {})
 E.sync_copies(S.copies)   # keep the library tables in step with this session (edited copies, undo, reset)
 
 
@@ -215,7 +217,7 @@ def make_ctx():
     names = {p: pname(p) for p in shown_people()}
     return E.Ctx(rows=visible_rows(), cat_of=cat_of, names=names, people_ids={p: person_images(p) for p in names},
                  fav=set(S.fav), faces_on=bool(S.faces_on), collections=all_cats(),
-                 last_ids=next((m["reply"].ids for m in reversed(S.chat) if m["role"] == "ai" and m["reply"].ids), []))
+                 last_ids=next((m["reply"].ids for m in reversed(S.chat) if m["role"] == "ai" and m["reply"].ids), list(S.last_ids)))
 
 
 # --------------------------------------------------------------------------- navigation, undo, chat
@@ -225,6 +227,8 @@ def go(view):
 
 
 def open_image(i):
+    # Record that the user opened this photo during the current app session.
+    S.setdefault("last_accessed", {})[i] = datetime.now()
     S.back = S.view if S.view != "detail" else S.back
     S.sel = i
     go("detail")
@@ -251,7 +255,7 @@ def open_menu():
 
 
 def new_chat():
-    S.chat, S.query = [], ""
+    S.chat, S.query, S.last_ids, S.llm_hist = [], "", [], []
     go("chat")
 
 
@@ -354,15 +358,31 @@ def ask(q):
     if not q:
         return
     remember_search(q)
-    S.chat.append({"role": "user", "text": q})
-    ctx = make_ctx()
+    # Only the newest question and answer stay on screen: old results are dropped so the user has less to read and the page stays light.
+    S.chat = [{"role": "user", "text": q}]
+    ctx = make_ctx()                      # follow-ups like "make it brighter" use S.last_ids, kept below
     rp = E.answer(ctx, q)
     if S.llm_on and E.llm_available() and rp.kind == "none" and rp.text.startswith("I couldn’t find"):
-        hist = [("user", m["text"]) if m["role"] == "user" else ("assistant", m["reply"].text) for m in S.chat[:-1]]
-        rp = E.llm_reply(ctx, hist, q) or rp
+        rp = E.llm_reply(ctx, list(S.llm_hist), q) or rp
     execute(rp)
     S.chat.append({"role": "ai", "reply": rp})
-    S.view, S.snack, S.menu, S.plus, S.scroll = "chat", None, False, False, "bottom"
+    if rp.ids:
+        S.last_ids = list(rp.ids)         # a short list of ids, not the old results
+    S.llm_hist = (S.llm_hist + [("user", q), ("assistant", rp.text)])[-8:]   # text only, for Smart chat
+    S.view, S.snack, S.menu, S.plus, S.scroll = "chat", None, False, False, True   # start at the new question
+
+
+def send_top():
+    q = (S.get("ask_search_q") or "").strip()
+    S["ask_search_q"] = ""
+    ask(q)
+
+
+def submit_top_search():
+    """Button callback runs before widgets are rebuilt, so clearing the field is safe."""
+    q = (S.get("ask_search_q") or "").strip()
+    S["ask_search_q"] = ""
+    ask(q)
 
 
 def send():
@@ -692,7 +712,14 @@ def view_analysing():
 
 # ---- chat -------------------------------------------------------------------------------------------
 def view_chat():
-    appbar("PixelSense", chat_btn=True)
+    appbar("PixelSense", chat_btn=False)
+    with st.container(key="ask_search"):
+        c1, c2 = st.columns([5, 1])
+        with c1:
+            st.text_input("Search your photos", key="ask_search_q", placeholder="Search your photos…",
+                          label_visibility="collapsed", on_change=send_top)
+        with c2:
+            st.button("Search", type="primary", key="ask_search_btn", on_click=submit_top_search)
     snack_ui()
     if not S.chat:
         intro()
@@ -852,6 +879,7 @@ def view_home():
     snack_ui()
     rows = visible_rows()
     groups = E.cleanup_groups(rows, S.kept)
+    groups["inactive_similar"] = inactive_similar_group(rows)
     n_clean = sum(len(v) for v in groups.values())
     cats = [c for c in all_cats() if c not in S.excluded_cats]
     with st.container(key="homehero"):
@@ -874,7 +902,7 @@ def view_home():
     if n_clean:
         thumbs = "".join(f'<img src="{img_uri(r.file, 120, 90)}" alt="">' for r in [x for v in groups.values() for x in v][:3])
         tappable("home_clean", f'<div class="banner pressable"><div class="bic">{svg("trash", 26, "#C27A00")}</div><div style="flex:1"><b>{n_clean} photos you may not need</b>'
-                               f'<small>Blurry, low-resolution and screenshot photos, grouped for a quick review. Nothing is removed without you.</small></div>'
+                               f'<small>Blurry, low-resolution, screenshots, and similar older photos you may not have opened recently. Nothing is removed without you.</small></div>'
                                f'<div class="bthumbs">{thumbs}</div>{svg("chev", 22, "#C27A00")}</div>', go, "cleanup", label="Review clean-up")
 
     if cats:
@@ -916,8 +944,11 @@ def view_home():
 
 @st.dialog("Remove these photos?")
 def clean_dialog(key):
-    ids = [r.id for r in E.cleanup_groups(visible_rows(), S.kept)[key]]
-    title = E.CLEAN_META[key][0].lower()
+    if key == "inactive_similar":
+        ids = [r.id for r in inactive_similar_group(visible_rows())]
+    else:
+        ids = [r.id for r in E.cleanup_groups(visible_rows(), S.kept)[key]]
+    title = (E.CLEAN_META.get(key) or ("Similar photos not opened recently", ""))[0].lower()
     md(f'<div class="info"><p><b>{len(ids)} {esc(title)}</b> will leave your library, search, People and collections.</p>'
        '<p><b>Your original files are not touched.</b> You can restore them from the Undo message or from Settings, Recently removed.</p></div>')
     c1, c2 = st.columns(2)
@@ -936,13 +967,16 @@ def view_cleanup():
     appbar("Clean up")
     snack_ui()
     groups = E.cleanup_groups(visible_rows(), S.kept)
+    groups["inactive_similar"] = inactive_similar_group(visible_rows())
+    cleanup_meta = dict(E.CLEAN_META)
+    cleanup_meta["inactive_similar"] = ("Similar photos not opened recently", "Similar-topic photos older than 30 days that have not been opened in PixelSense recently. Review before removing.")
     total = sum(len(v) for v in groups.values())
     md(f'<div class="sub" style="margin-top:0;max-width:720px">{total} photo{"s" if total != 1 else ""} you may not need. PixelSense measures sharpness and size on this device, '
        'then groups the likely clutter. Tap a photo to look closer. Nothing is removed until you confirm, and everything can be undone.</div>')
     if not total:
-        empty_state("check", "All tidy", "No blurry, low-resolution or leftover screenshot photos to review.")
+        empty_state("check", "All tidy", "No blurry, low-resolution, leftover screenshot, or repeated-topic photos to review.")
         return
-    for key, (title, desc) in E.CLEAN_META.items():
+    for key, (title, desc) in cleanup_meta.items():
         items = groups[key]
         if not items:
             continue
@@ -973,6 +1007,53 @@ def view_memory():
 
 
 # ---- photos timeline ----------------------------------------------------------------------------------
+def photo_source_text(r):
+    """Best-effort source metadata for the sample-data prototype."""
+    values = [getattr(r, field, "") for field in ("file", "description", "visible_text", "source", "folder", "album", "origin")]
+    return " ".join(str(v or "") for v in values).lower()
+
+
+def inactive_similar_group(rows):
+    """Group visually similar older photos that have not been opened recently (prototype heuristic)."""
+    now = datetime.now()
+    candidates = []
+    for r in rows:
+        if r.id in S.kept:
+            continue
+        last = S.last_accessed.get(r.id)
+        taken = E.taken_date(r)
+        old_enough = bool(taken and (date.today() - taken).days >= 30)
+        not_recently_opened = last is None or (now - last).days >= 30
+        if old_enough and not_recently_opened:
+            try:
+                im = Image.open(ROOT / r.file).convert("L").resize((8, 8))
+                pixels = list(im.getdata())
+                avg = sum(pixels) / len(pixels)
+                signature = tuple(1 if px >= avg else 0 for px in pixels)
+                candidates.append((r, signature))
+            except (OSError, ValueError):
+                continue
+
+    # A small average-hash comparison is adequate for a demo, not production-grade recognition.
+    groups, used = [], set()
+    for idx, (r, sig) in enumerate(candidates):
+        if idx in used:
+            continue
+        cluster = [r]
+        used.add(idx)
+        for j in range(idx + 1, len(candidates)):
+            if j in used:
+                continue
+            other_sig = candidates[j][1]
+            distance = sum(a != b for a, b in zip(sig, other_sig))
+            if distance <= 10:
+                cluster.append(candidates[j][0])
+                used.add(j)
+        if len(cluster) >= 2:
+            groups.append(cluster)
+    return [r for cluster in groups for r in cluster]
+
+
 def view_photos():
     appbar("Photos")
     snack_ui()
@@ -981,12 +1062,21 @@ def view_photos():
         S.hfilter = o
         st.rerun()
 
-    chips("lib", ["All", "Favorites"] + TYPE_FILTERS[1:], S.hfilter, pick)
+    options = ["All", "Camera", "Screenshots", "WhatsApp images", "Favorites"]
+    if S.hfilter not in options:
+        S.hfilter = "All"
+    chips("lib", options, S.hfilter, pick)
     rows = visible_rows()
     if S.hfilter == "Favorites":
         rows = [r for r in rows if r.id in S.fav]
-    elif S.hfilter != "All":
-        rows = [r for r in rows if r.type.title() == S.hfilter]
+    elif S.hfilter == "Screenshots":
+        rows = [r for r in rows if "screenshot" in photo_source_text(r) or str(getattr(r, "type", "")).lower() == "screenshot"]
+    elif S.hfilter == "WhatsApp images":
+        rows = [r for r in rows if "whatsapp" in photo_source_text(r) or "whats app" in photo_source_text(r)]
+    elif S.hfilter == "Camera":
+        rows = [r for r in rows if str(getattr(r, "type", "")).lower() in ("photo", "camera", "image")
+                and "screenshot" not in photo_source_text(r) and "whatsapp" not in photo_source_text(r)
+                and "whats app" not in photo_source_text(r)]
     if not rows:
         empty_state("heart" if S.hfilter == "Favorites" else "image", "Nothing here yet",
                     "Tap the heart on a photo to add it here." if S.hfilter == "Favorites" else f"No {S.hfilter.lower()} photos that AI is allowed to use.")
@@ -1022,12 +1112,13 @@ def view_people():
            '<p>PixelSense finds faces and puts the same person together, so you can open one face and see every photo of them.</p>'
            '<p><b>You stay in control:</b> you name people, you can hide anyone, and you can turn this off and forget names at any time in Settings.</p>'
            '<p style="color:#8A8EA8;font-size:12.5px">In this prototype faces are prepared in advance. Nothing is recognised live and nothing leaves this device.</p></div>')
-        if st.button("Turn on face groups", type="primary", key="faces_on"):
-            S.faces_on = True
-            notify("Face groups are on. Tap a face to see every photo of that person.", False)
-            st.rerun()
+        with st.container(key="cta_turnon"):
+            if st.button("Turn on face groups", type="primary", key="faces_turn_on"):   # not "faces_on": that is the S.faces_on state key
+                S.faces_on = True
+                notify("Face groups are on. Tap a face to see every photo of that person.", False)
+                st.rerun()
         if not off:
-            with st.container(key="plain_notnow"):
+            with st.container(key="cta_notnow"):
                 if st.button("Not now", key="faces_notnow"):
                     S.faces_on = False
                     st.rerun()
@@ -1079,6 +1170,13 @@ def view_person():
 
 
 # ---- details --------------------------------------------------------------------------------------------
+def toggle_fav(i):
+    snap()
+    S.fav.symmetric_difference_update({i})
+    notify("Added to Favorites." if i in S.fav else "Removed from Favorites.")
+    st.rerun()
+
+
 def view_detail():
     if S.sel is None or S.sel not in R or not visible(R[S.sel]):
         go("chat")
@@ -1146,12 +1244,9 @@ def view_detail():
             if st.button("✎ Edit", key="d_edit"):
                 open_editor(r.id)
         with c0:
-            with st.container(key="favbtn"):
-                if st.button("♥" if r.id in S.fav else "♡", key="d_fav", help="Favorite"):
-                    snap()
-                    S.fav.symmetric_difference_update({r.id})
-                    notify("Added to Favorites." if r.id in S.fav else "Removed from Favorites.")
-                    st.rerun()
+            on = r.id in S.fav
+            tappable("fav", f'<div class="favlook {"on" if on else ""} pressable">{svg("heart", 32, "#D6455D", 2, "#D6455D" if on else "none")}</div>',
+                     toggle_fav, r.id, label="Remove from Favorites" if on else "Add to Favorites")
         with c1:
             if st.button("Move to…", type="primary", key="d_move"):
                 move_dialog(r.id)
@@ -1420,7 +1515,7 @@ def view_settings():
         md(f'<div class="pills">{"".join(pill(s, "gray") for s in S.searches)}</div>')
         with st.container(key="sm_hist"):
             if st.button("Clear history and chat", key="hist_clear"):
-                S.searches, S.chat = [], []
+                S.searches, S.chat, S.last_ids, S.llm_hist = [], [], [], []
                 notify("History cleared.", False)
                 st.rerun()
     else:
@@ -1537,8 +1632,8 @@ VIEWS = {"edit": view_edit, "home": view_home, "cleanup": view_cleanup, "memory"
 with st.container(key=f"v_{S.view}"):
     VIEWS.get(S.view, view_chat)()
 
-if S.view in ("home", "chat", "photos", "results", "people", "person", "collections", "collection", "cleanup", "memory"):
-    composer()
+# Search is intentionally available only on Ask PixelSense, at the top of that screen.
+# The legacy bottom composer is no longer rendered on other views.
 drawer()
 
 if S.scroll:

@@ -40,6 +40,9 @@ html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{backg
 .stButton>button:hover{border-color:#CFCBF5;background:#FAF9FF;color:#5B4FD6}
 .stButton>button:active{transform:scale(.98)}
 .stButton>button p{color:inherit!important;margin:0}
+/* Ask PixelSense search action matches the search field shape and brand typography. */
+.st-key-ask_search_btn.stButton>button{border-radius:16px!important;font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif!important;font-weight:700!important}
+.st-key-ask_search_btn.stButton>button p{font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif!important;font-weight:700!important}
 .stButton>button[kind="primary"],.stButton>button[data-testid="stBaseButton-primary"]{
   background:linear-gradient(135deg,#6A5CF0,#4B3FC7)!important;border:none!important;color:#fff!important;
   box-shadow:0 8px 20px rgba(91,79,214,.32)}
@@ -307,8 +310,7 @@ details.how ol{margin:6px 0 4px;padding-left:18px;line-height:1.55}
 .consent{padding:18px}
 .consent h3{margin:0 0 6px;font-size:18px;font-weight:800;letter-spacing:-.4px;color:#1F2140}
 .consent p{margin:0 0 4px;font-size:13.5px;line-height:1.55;color:#4D5170}
-.st-key-actionbar [data-testid="stColumn"]:first-child{flex:0 0 56px!important;width:56px!important;min-width:56px!important}
-.st-key-favbtn button{font-size:22px;padding:0;color:#D6455D}
+.st-key-actionbar [data-testid="stColumn"]:first-child{flex:0 0 68px!important;width:68px!important;min-width:68px!important}
 @media (max-width:480px){.st-key-composer,.st-key-actionbar,.st-key-navbar{width:100vw!important}}
 
 /* =====================  V4: DESKTOP / FULL-PAGE LAYOUT  =====================
@@ -378,7 +380,7 @@ div[data-testid="stDialog"] div[role="dialog"]{max-width:min(92vw,520px)!importa
 .st-key-start .stButton>button{min-height:54px;font-size:16px}
 
 /* ---------- buttons never stretch across a whole desktop screen ---------- */
-.st-key-faces_on,[class*="st-key-danger"],.st-key-plain_notnow{max-width:380px}
+[class*="st-key-danger"]{max-width:380px}
 .st-key-v_person [data-testid="stHorizontalBlock"]:has(.st-key-per_rename){max-width:460px;margin:0 auto}
 .empty{max-width:640px;margin:20px auto}
 .consent{max-width:760px}
@@ -523,4 +525,24 @@ div[data-testid="stDialog"] div[role="dialog"]{max-width:min(92vw,520px)!importa
   .st-key-stack_edit [data-testid="stColumn"]{flex:1 1 100%!important;width:100%!important}
   .st-key-stack_edit [data-testid="stColumn"] [data-testid="stColumn"]{flex:1 1 0!important;width:auto!important}
 }
+
+
+/* ---------- action bar: every button the same height, favourite heart large ---------- */
+.st-key-actionbar [data-testid="stHorizontalBlock"]{align-items:stretch!important}
+.st-key-actionbar .stButton>button,.st-key-actionbar [data-testid="stBaseButton-secondary"],.st-key-actionbar [data-testid="stBaseButton-primary"]{
+  height:54px!important;min-height:54px!important;font-size:15px}
+
+
+/* ---------- favourite button: round like its neighbours, big filled heart like the one on the photo ---------- */
+.favlook{height:54px;display:grid;place-items:center;background:#fff;border:1.5px solid #E7E8F2;border-radius:14px;box-sizing:border-box;
+  box-shadow:0 1px 2px rgba(31,33,64,.04)}
+.favlook.on{background:#FFF1F4;border-color:#F4BAC7}
+.st-key-tap_fav:hover .favlook{border-color:#F4BAC7;background:#FFF7F9}
+.st-key-tap_fav .stButton>button{border-radius:14px}
+
+/* ---------- People consent: both buttons share one shape; Not now is white with grey text ---------- */
+.st-key-cta_turnon .stButton>button,.st-key-cta_notnow .stButton>button{min-height:54px;border-radius:14px;font-size:15px;font-weight:700}
+.st-key-cta_notnow .stButton>button{background:#fff!important;color:#6B6F8C!important;border:1.5px solid #E7E8F2!important;
+  box-shadow:0 8px 20px rgba(31,33,64,.06)}
+.st-key-cta_notnow .stButton>button:hover{background:#F6F7FB!important;color:#4D5170!important;border-color:#D5D7E6!important}
 """
