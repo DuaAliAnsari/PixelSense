@@ -749,3 +749,216 @@ CSS = CSS + r"""
 .st-key-consent_btns .stButton>button{background:#fff;border:1.5px solid #D5D2F3!important;color:#1F2140}
 .st-key-consent_btns .stButton>button[kind="primary"],.st-key-consent_btns .stButton>button[data-testid="stBaseButton-primary"]{background:linear-gradient(135deg,#6A5CF0,#4B3FC7)!important;border:none!important;color:#fff}
 """
+
+# =====================================================================================================
+# v7 FLAT: matches DESIGN_REFERENCE.png (flat white cards, thin lavender borders, solid purple actions,
+# small rounded controls). Keeps the desktop layout: permanent left sidebar, full-width content.
+# Loaded last, so it overrides the Liquid Glass layer above without touching any layout rule.
+# =====================================================================================================
+CSS = CSS + r"""
+:root{--b:#4F46C6;--b-d:#4238B4;--tint:#EEEBFF;--tint-2:#F6F5FF;--line:#E6E7F2;--page:#F4F5FB;--ink:#1B1D3A;--muted:#6C7090;
+  --r-card:16px;--r-ctl:12px}
+
+/* ---- type: Inter everywhere (Streamlit's own heading font was leaking through) ---- */
+html,body,.stApp,.stApp div,.stApp p,.stApp h1,.stApp h2,.stApp h3,.stApp h4,.stApp label,.stApp li,.stApp button,.stApp input,.stApp textarea,.stApp select,
+.stApp span:not([data-testid="stIconMaterial"]){font-family:'Inter','Segoe UI',system-ui,-apple-system,Roboto,sans-serif!important}
+.stApp{color:var(--ink)}
+
+/* ---- page: flat light lavender, no gradient blobs, no blur anywhere ---- */
+html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{background:var(--page)!important}
+.stApp{background-image:none!important;background-color:var(--page)!important}
+.card,.stat,.feat,.empty,.banner,.glass,.found,.lcard,.ctile,.cov,.pill,.dbadge,.tile,.cbtn,.ibtn,.stButton>button,
+.st-key-sidebar,.st-key-drawer,.st-key-plussheet,.st-key-actionbar,.st-key-snack,.st-key-composer,div[data-testid="stDialog"] div[role="dialog"],
+[data-testid="stTextInput"] [data-baseweb="input"],[class*="st-key-att_img"],[class*="st-key-att_m"],.st-key-studybar,.spin{
+  -webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+
+/* ---- cards: white, 1px lavender-grey border, whisper shadow ---- */
+.card,.stat,.feat,.empty,.cov,.glass,.lcard.good,[class*="st-key-att_img"],[class*="st-key-att_m"],[class*="st-key-row_"]{
+  background:#fff!important;border:1px solid var(--line)!important;border-radius:var(--r-card)!important;
+  box-shadow:0 1px 2px rgba(27,29,58,.04)!important}
+.ctile{border:1px solid rgba(27,29,58,.05)!important;border-radius:var(--r-card)!important;box-shadow:none!important}
+.banner{background:#FFF6E4!important;border:1px solid #F4DDAB!important;border-radius:var(--r-card)!important;box-shadow:none!important}
+.lcard.warn{background:#FFF7E6!important;border:1px solid #F4DDAB!important;border-radius:var(--r-card)!important;box-shadow:none!important}
+.found{background:#EAF8F1!important;border:1px solid #BFE8D3!important;border-radius:var(--r-card)!important;box-shadow:none!important}
+@media (hover:hover){
+  [class*="st-key-tap_"]:hover .card,[class*="st-key-tap_"]:hover .cov,[class*="st-key-tap_"]:hover .stat{border-color:#CFCBF0!important;
+    box-shadow:0 4px 14px rgba(79,70,198,.10)!important}
+  [class*="st-key-tap_"]:hover .pressable{transform:none}
+  [class*="st-key-tap_"]:hover .tile{box-shadow:0 4px 14px rgba(27,29,58,.16)}
+}
+.tile{border:1px solid var(--line);border-radius:14px;box-shadow:none}
+.cov{overflow:hidden}
+.rthumb,.att-thumb{border-radius:10px}
+.stat .sic,.feat .fi,.setrow .si,.dmap .si,.banner .bic,.qrow .qi{background:var(--tint)!important;color:var(--b)!important;border-radius:12px!important;box-shadow:none!important}
+.banner .bic{background:#fff!important;color:#C27A00!important}
+.dbadge{background:var(--tint);color:var(--b-d);box-shadow:none;border-radius:12px}
+.dbadge.urgent{background:#FFF1D6;color:#8A5200}
+.empty .ic{background:var(--tint)!important}
+.empty,.card{overflow:hidden}
+
+/* ---- pills / tags: lavender tag, amber "needs review" outline ---- */
+.pill{background:var(--tint);color:#3B33A0;border:1px solid transparent;font-weight:600}
+.pill.warn{background:#FFF6E4;color:#8A5200;border:1px solid #F4DDAB}
+.pill.good{background:#E6F6EE;color:#0F6B49}
+.pill.gray{background:#EFF0F6;color:#555A75}
+.pill.bad{background:#FFE9EC;color:#9B2236}
+.hero-img .pill{background:#fff;border:1px solid var(--line)}
+mark{background:#E4DFFF;color:#3A2FA0}
+
+/* ---- buttons: small rounded rectangles, outlined secondary, solid purple primary ---- */
+.stButton>button{border-radius:var(--r-ctl);background:#fff;border:1px solid #D8D5F2;color:var(--b);box-shadow:none;font-weight:600;font-size:14px;min-height:44px}
+.stButton>button p{color:inherit!important}
+.stButton>button:hover{background:var(--tint-2);border-color:var(--b);color:var(--b-d)}
+.stButton>button[kind="primary"],.stButton>button[data-testid="stBaseButton-primary"]{background:var(--b)!important;border:none!important;color:#fff!important;box-shadow:none!important}
+.stButton>button[kind="primary"]:hover,.stButton>button[data-testid="stBaseButton-primary"]:hover{background:var(--b-d)!important;filter:none;color:#fff!important}
+[class*="st-key-back"] button{border-radius:50%!important;background:#fff;border:1px solid var(--line);box-shadow:none}
+[class*="st-key-link"] button{background:none!important;border:none!important;color:var(--b)!important;min-height:28px}
+[class*="st-key-sm_"] button{border-radius:var(--r-ctl);min-height:42px}
+[class*="st-key-danger"] button{color:#C2334D;border-color:#F3C9D1}
+[class*="st-key-plain"] button,.st-key-plain_notnow .stButton>button{background:none!important;border:none!important;color:var(--muted)!important}
+.st-key-consent_btns .stButton>button{border:1px solid #D8D5F2!important;background:#fff;color:var(--b)}
+.st-key-consent_btns .stButton>button[kind="primary"],.st-key-consent_btns .stButton>button[data-testid="stBaseButton-primary"]{background:var(--b)!important;border:none!important;color:#fff}
+.stDownloadButton>button{border-radius:var(--r-ctl);border:1px solid #D8D5F2;color:var(--b);background:#fff}
+.stButton>button:focus-visible{outline:3px solid rgba(79,70,198,.35);outline-offset:2px}
+
+/* ---- chips: lavender pills, selected = solid purple (as in the Library / Search filters) ---- */
+[class*="st-key-chips"] .stButton>button{background:#EFEDFD;border:1px solid transparent;color:#3B33A0;border-radius:999px;min-height:38px;font-weight:600;box-shadow:none}
+[class*="st-key-chips"] .stButton>button p{color:inherit!important}
+[class*="st-key-chips"] .stButton>button:hover{background:#E4E0FB;border-color:transparent;color:#2F2790}
+[class*="st-key-chips"] .stButton>button[kind="primary"],[class*="st-key-chips"] .stButton>button[data-testid="stBaseButton-primary"]{background:var(--b)!important;color:#fff!important}
+[class*="st-key-chips"] .stButton>button[kind="primary"] p,[class*="st-key-chips"] .stButton>button[data-testid="stBaseButton-primary"] p{color:#fff!important}
+
+/* ---- inputs ---- */
+[data-testid="stTextInput"] [data-baseweb="input"],[data-testid="stTextArea"] [data-baseweb="textarea"],[data-testid="stNumberInput"] [data-baseweb="input"],[data-testid="stDateInput"] [data-baseweb="input"],[data-baseweb="select"]>div{
+  background-color:#fff!important;border:1px solid var(--line)!important;border-radius:var(--r-ctl)!important;box-shadow:none!important}
+[data-testid="stTextInput"] [data-baseweb="input"]{height:50px!important;min-height:50px!important}
+[data-testid="stTextInput"] [data-baseweb="input"]:focus-within{border-color:var(--b)!important;box-shadow:0 0 0 3px rgba(79,70,198,.16)!important}
+[data-testid="stRadio"] label{border:1px solid var(--line);border-radius:var(--r-ctl);background:#fff}
+[data-testid="stRadio"] label:has(input:checked){border-color:var(--b);background:var(--tint-2)}
+[class*="st-key-sel_"]{background:#fff;border:1px solid var(--line);border-radius:var(--r-ctl);box-shadow:none}
+
+/* ---- Ask screen: one flat prompt bar, plain heading ---- */
+.greet h2{font-weight:700;letter-spacing:-.03em;color:var(--ink)}
+.greet p{color:var(--muted)}
+.st-key-composer{background:linear-gradient(to top,var(--page) 68%,rgba(244,245,251,0))!important}
+.cbtn{background:#fff;border:1px solid var(--line);box-shadow:none;color:var(--b)}
+.cbtn.send{background:var(--b);border-color:var(--b);color:#fff;box-shadow:0 6px 16px rgba(79,70,198,.30)}
+.st-key-composer_q [data-baseweb="input"]{border-radius:27px!important;box-shadow:0 2px 12px rgba(27,29,58,.06)!important}
+.ibtn{background:#fff;border:1px solid var(--line);box-shadow:none}
+.st-key-plussheet{background:#fff!important;border:1px solid var(--line);border-radius:var(--r-card)!important;box-shadow:0 12px 32px rgba(27,29,58,.14)!important}
+.pl-row i{background:var(--tint);color:var(--b)}
+.bub-u{background:var(--b);border-radius:16px 16px 4px 16px}
+.av-ai{background:var(--b);border-radius:11px}
+.bub-a{border:1px solid var(--line);box-shadow:none;border-radius:4px 16px 16px 16px}
+details.how summary{color:var(--b)}
+
+/* ---- sidebar: flat white column, lavender active row, solid purple logo ---- */
+.logo-sm{background:var(--b)!important;border-radius:11px;width:36px;height:36px}
+.dr-head{font-weight:700;font-size:19px;letter-spacing:-.03em;color:var(--ink)}
+.dr-row{border-radius:var(--r-ctl);font-weight:600;font-size:14.5px;color:#2B2E4D;padding:11px 14px}
+.dr-row.on{background:var(--tint)!important;color:var(--b)!important;box-shadow:none!important}
+.dr-row:not(.on):hover{background:var(--tint-2)!important}
+.dr-row small{background:var(--tint);color:var(--b);border-radius:999px;padding:2px 8px;font-weight:700}
+.dr-note{color:#8A8EA8}
+.st-key-drawer{background:#fff!important;border:none!important;border-radius:0 20px 20px 0!important}
+@media (min-width:1000px){
+  .st-key-sidebar{top:0!important;bottom:0!important;left:0!important;width:252px!important;max-width:252px!important;background:#fff!important;
+    border:none!important;border-right:1px solid var(--line)!important;border-radius:0!important;box-shadow:none!important;padding:26px 14px!important}
+  [data-testid="stMainBlockContainer"]:has(.st-key-sidebar){padding-left:calc(252px + 44px)!important}
+  [data-testid="stMainBlockContainer"]:has(.st-key-sidebar) .st-key-composer{left:calc(50% + 126px)!important;width:min(calc(100vw - 252px),920px)!important}
+  [data-testid="stMainBlockContainer"]:has(.st-key-sidebar) .st-key-actionbar{left:calc(50% + 126px)!important;width:min(calc(100vw - 252px),780px)!important}
+  [data-testid="stMainBlockContainer"]:has(.st-key-sidebar) .st-key-plussheet{left:calc(50% + 126px)!important;
+    transform:translateX(calc(-1 * min((100vw - 252px) / 2, 460px) + 24px))!important}
+}
+.st-key-actionbar{background:#fff!important;border:1px solid var(--line);box-shadow:0 -8px 24px rgba(27,29,58,.06)!important}
+
+/* ---- headings: bold, dark, no glass-era tracking ---- */
+.sect b{font-weight:700;letter-spacing:-.02em;font-size:20px;color:var(--ink)}
+.sect span{color:var(--muted);font-weight:500}
+.ab-title{font-weight:700;color:var(--ink)}
+.ab-title.two{display:flex;flex-direction:column;justify-content:center;line-height:1.15;text-align:left}
+.ab-title.two small{font-size:14px;font-weight:500;color:var(--muted);letter-spacing:0}
+.ab-title.two b{font-size:28px;font-weight:700;letter-spacing:-.03em;color:var(--ink)}
+.me{width:44px;height:44px;border-radius:50%;background:var(--tint);color:var(--b);display:grid;place-items:center;font-weight:700;font-size:16px;margin-left:auto}
+.st-key-home_q{max-width:640px;margin:2px 0 6px}
+.h1,.dtitle,.rtitle,.wel-h,.hh-t{color:var(--ink)}
+.snack-t{color:#fff!important}
+.st-key-snack{background:#1B1D3A!important;border:none!important;border-radius:14px!important}
+
+/* ---- welcome: soft lavender splash (like screen 1), purple Get started ---- */
+.st-key-stack_wel{background:linear-gradient(135deg,#E8E4FD 0%,#F3F1FF 48%,#E3EFFC 100%)!important;border:1px solid #DFDBF6!important;
+  box-shadow:none!important;border-radius:24px!important}
+.wel-brand,.wel-h{color:var(--ink)!important}
+.wel-p{color:var(--muted)!important}
+.wel-note{color:#8A8EA8!important}
+.wel-logo2{background:var(--b);border-radius:12px}
+.mos .m{border:3px solid #fff;box-shadow:0 8px 22px rgba(27,29,58,.18);border-radius:16px}
+.st-key-start .stButton>button,.st-key-start .stButton>button[kind="primary"],.st-key-start .stButton>button[data-testid="stBaseButton-primary"]{
+  background:var(--b)!important;color:#fff!important;border:none!important;box-shadow:0 8px 20px rgba(79,70,198,.28)!important}
+.st-key-start .stButton>button:hover{background:var(--b-d)!important;color:#fff!important}
+.st-key-start .stButton>button p{color:#fff!important}
+.st-key-why .stButton>button{background:#fff!important;color:var(--b)!important;border:1px solid #D8D5F2!important}
+.st-key-homehero{background:var(--tint)!important;border:1px solid #DFDBF6!important;box-shadow:none!important;border-radius:24px!important}
+.st-key-homehero .hh-t{color:var(--ink)!important}.st-key-homehero .hh-s{color:var(--muted)!important}
+
+/* ---- dialogs, spinner, progress ---- */
+div[data-testid="stDialog"] div[role="dialog"]{background:#fff!important;border:1px solid var(--line);border-radius:20px!important;box-shadow:0 24px 60px rgba(27,29,58,.22)!important}
+.spin{background:none;box-shadow:none;border:6px solid #E3E1F7;border-top-color:var(--b)}
+.progress i{background:var(--b)}
+.att-proof i{background:var(--tint);color:var(--ink)}
+.att-hero .ah-n,.about-h{color:var(--ink)}
+.ah-sep{background:var(--line)}
+.setrow,.stepi{border-bottom:1px solid #EFF0F7}
+.loop .lp-c{border-left-color:var(--b)}
+.dm-t em{color:var(--b)}
+"""
+
+# v7b: text inputs across Streamlit versions (newer builds expose data-testid="stTextInputRootElement" instead of baseweb)
+CSS = CSS + r"""
+[data-testid="stTextInput"] [data-testid="stTextInputRootElement"]{background-color:#fff!important;border:1px solid var(--line)!important;
+  border-radius:var(--r-ctl)!important;height:50px!important;min-height:50px!important;box-shadow:none!important;overflow:hidden;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236C7090' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:16px center;background-size:20px}
+[data-testid="stTextInput"] [data-testid="stTextInputRootElement"]:focus-within{border-color:var(--b)!important;box-shadow:0 0 0 3px rgba(79,70,198,.16)!important}
+[data-testid="stTextInput"] [data-testid="stTextInputRootElement"]>div,[data-testid="stTextInput"] [data-testid="stTextInputRootElement"] [data-baseweb="base-input"]{background:transparent!important;border:0!important}
+.st-key-composer_q [data-testid="stTextInputRootElement"],.st-key-composer_q [data-baseweb="input"]{height:54px!important;min-height:54px!important;border-radius:27px!important;
+  background-image:none!important;border:1px solid var(--line)!important;box-shadow:0 2px 12px rgba(27,29,58,.06)!important}
+[class*="st-key-nc_name"] [data-testid="stTextInputRootElement"],[class*="st-key-nc_new"] [data-testid="stTextInputRootElement"],
+[class*="st-key-md_"] [data-testid="stTextInputRootElement"],[class*="st-key-st_"] [data-testid="stTextInputRootElement"],[class*="st-key-per_"] [data-testid="stTextInputRootElement"]{background-image:none!important}
+[class*="st-key-nc_name"] input,[class*="st-key-nc_new"] input,[class*="st-key-md_"] input,[class*="st-key-st_"] input,[class*="st-key-per_"] input{padding-left:14px!important}
+"""
+
+CSS = CSS + r"""
+.st-key-start .stButton,.st-key-start [data-testid="stElementContainer"]{max-width:260px!important}
+.st-key-home_q,.st-key-home_q [data-testid="stTextInput"]{max-width:640px!important}
+"""
+
+CSS = CSS + r"""
+img.me{object-fit:cover;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);display:block}
+"""
+
+CSS = CSS + r"""
+/* labelled Home button on the results and photo-details screens */
+[class*="st-key-homebtn_"]{display:flex;justify-content:flex-end;width:100%!important;max-width:100%!important}
+[class*="st-key-homebtn_"] .stButton{width:auto!important;max-width:none!important}
+[class*="st-key-homebtn_"] .stButton>button{width:auto!important;min-width:0!important;padding:0 18px;min-height:44px;gap:6px}
+"""
+
+CSS = CSS + r"""
+/* keep the title bar (and its Home button) in view while scrolling a long set of results */
+.st-key-v_chat .st-key-appbar,.st-key-v_results .st-key-appbar{position:sticky;top:0;z-index:60;background:var(--page);margin:0!important;padding:14px 0 10px!important}
+"""
+
+CSS = CSS + r"""
+/* newer Streamlit wraps keyed blocks in a layout wrapper: the wrapper is what has to stick */
+.st-key-v_chat [data-testid="stLayoutWrapper"]:has(> .st-key-appbar),.st-key-v_results [data-testid="stLayoutWrapper"]:has(> .st-key-appbar){
+  position:sticky;top:0;z-index:60;background:var(--page)}
+.st-key-v_chat [data-testid="stLayoutWrapper"]>.st-key-appbar,.st-key-v_results [data-testid="stLayoutWrapper"]>.st-key-appbar{position:static}
+"""
+
+CSS = CSS + r"""
+/* the Home button needs its natural width (the app bar's last column is otherwise fixed at 48px for the old icon button) */
+.st-key-v_chat .st-key-appbar [data-testid="stColumn"]:last-child,.st-key-v_results .st-key-appbar [data-testid="stColumn"]:last-child,
+[class*="st-key-topbar_"] [data-testid="stColumn"]:last-child:not(:first-child){flex:1 1 auto!important;width:auto!important;min-width:110px!important}
+[class*="st-key-homebtn_"] .stButton>button{white-space:nowrap}
+"""

@@ -1,7 +1,7 @@
 """PixelSense - a chat-first photo assistant that rescues deadlines and bills trapped inside photos (HCI prototype).
 
 Core features: Needs attention (the core problem), Why PixelSense (problem + loopholes), Your data (information architecture,
-consent-based analytics) and a Liquid Glass visual system. See PROBLEM_AND_DESIGN.md.
+consent-based analytics) and a flat, light visual system. See PROBLEM_AND_DESIGN.md.
 
 Screens: Ask PixelSense (chat), Photos (timeline), People (face groups), Collections, Photo details, Settings.
 Navigation lives in the top-left corner menu; the prompt bar sits at the bottom with a "+" for new collections.
@@ -284,8 +284,17 @@ def open_menu():
 
 
 def new_chat():
-    S.chat, S.query = [], ""
-    go("chat")
+    """Clear the current search and return to Home (the one place searches start)."""
+    S.chat, S.query, S.menu, S.plus = [], "", False, False
+    go("home")
+
+
+def home_button(key):
+    """Labelled way back to Home, shown on the search-results and photo-details screens."""
+    with st.container(key=f"homebtn_{key}"):
+        if st.button("Home", key=f"homebtn_btn_{key}", icon=":material/home:"):
+            new_chat()
+            st.rerun()
 
 
 def notify(msg, can_undo=True):
@@ -439,26 +448,43 @@ def chips(key, options, current, on_pick):
                     on_pick(o)
 
 
-def topbar(title, back_view, key):
+def topbar(title, back_view, key, home=False):
     with st.container(key=f"topbar_{key}"):
-        c1, c2 = st.columns([1, 6])
+        c1, c2, *c3 = st.columns([1, 4, 2] if home else [1, 6])
         with c1:
             if st.button("←", key=f"back_{key}", help="Back"):
                 go(back_view)
         with c2:
             md(f'<div class="tb-title">{esc(title)}</div>')
+        if home:
+            with c3[0]:
+                home_button(key)
 
 
-def appbar(title="PixelSense", chat_btn=False):
+USER_NAME = "Ayesha Khan"   # dummy account name shown in the Home greeting; change to any name
+USER_PIC = "images/selfie_closeup.jpg"   # dummy account picture; point to any file in images/
+
+
+def greeting():
+    h = datetime.now().hour
+    return "Good morning" if h < 12 else "Good afternoon" if h < 18 else "Good evening"
+
+
+def appbar(title="PixelSense", chat_btn=False, greet=False):
     with st.container(key="appbar"):
-        c1, c2, c3 = st.columns([1, 5, 1])
+        c1, c2, c3 = st.columns([1, 4, 2] if chat_btn else [1, 5, 1])
         with c1:
             tappable("menu", f'<div class="ibtn pressable">{svg("menu", 22)}</div>', open_menu, label="Open menu")
         with c2:
-            md(f'<div class="ab-title">{esc(title)}</div>')
+            if greet:
+                md(f'<div class="ab-title two"><small>{greeting()},</small><b>{esc(USER_NAME)}</b></div>')
+            else:
+                md(f'<div class="ab-title">{esc(title)}</div>')
         with c3:
+            if greet:
+                md(f'<img class="me" src="{img_uri(USER_PIC, 96, 96)}" alt="{esc(USER_NAME)} account picture">')
             if chat_btn:
-                tappable("newchat", f'<div class="ibtn pressable">{svg("edit", 20)}</div>', new_chat, label="New chat")
+                home_button("chat")
 
 
 def snack_ui():
@@ -682,7 +708,7 @@ def view_welcome():
     with st.container(key="stack_wel"):
         left, right = st.columns([1, 1])
         with left:
-            md(f'''<div class="wel-brand"><span class="wel-logo2">{svg("sparkle", 22, "#5B4FD6", 1.2, "#5B4FD6")}</span>PixelSense</div>
+            md(f'''<div class="wel-brand"><span class="wel-logo2">{svg("sparkle", 22, "#fff", 1.2, "#fff")}</span>PixelSense</div>
               <div class="wel-h">Your photo library, organised the way you ask.</div>
               <div class="wel-p">Find any photo in your own words, clear out blurry and duplicate shots, and keep what matters. You decide what the AI can read, and everything stays on your device.</div>''')
             if st.button("Get started", type="primary", key="start"):
@@ -731,11 +757,11 @@ def view_analysing():
 
 # ---- chat -------------------------------------------------------------------------------------------
 def view_chat():
-    appbar("PixelSense", chat_btn=True)
+    if not S.chat:                       # nothing searched yet: searching starts on Home
+        S.view = "home"
+        st.rerun()
+    appbar("Search results", chat_btn=True)
     snack_ui()
-    if not S.chat:
-        intro()
-        return
     last = len(S.chat) - 1
     for idx, m in enumerate(S.chat):
         render_msg(idx, m, idx == last)
@@ -883,8 +909,17 @@ def health_card():
        '<div class="att-proof">Counts bills and deadlines you handled, plus clutter you decided on. Keep and Remove count the same, so deleting is never rewarded.</div></div></div>')
 
 
+def home_send():
+    """Home search bar (Enter): same behaviour as the Ask prompt bar."""
+    q = (S.get("home_q") or "").strip()
+    S["home_q"] = ""
+    ask(q)
+
+
 def view_home():
-    appbar("Home")
+    appbar("Home", greet=True)
+    st.text_input("Search your library", key="home_q", placeholder="Search your library…", label_visibility="collapsed", on_change=home_send)
+    chips("home", list(HOME_CHIPS), None, ask_chip)
     snack_ui()
     rows = visible_rows()
     groups = E.cleanup_groups(rows, S.kept)
@@ -1462,7 +1497,7 @@ def view_detail():
     if S.sel is None or S.sel not in R or not visible(R[S.sel]):
         go("chat")
     r = R[S.sel]
-    topbar("Photo details", S.back, "det")
+    topbar("Photo details", S.back, "det", home=True)
     snack_ui()
     cur, (auto, reason) = cat_of(r), AUTO[r.id]
     moved = r.id in S.override
@@ -1928,8 +1963,8 @@ def composer():
         with st.container(key="plussheet"):
             tappable("pl_new", f'<div class="pl-row pressable"><i>{svg("folder", 18)}</i><div>New collection<small>Name it, optionally fill it from a search</small></div></div>',
                      plus_new_collection, label="New collection")
-            tappable("pl_chat", f'<div class="pl-row pressable"><i>{svg("edit", 18)}</i><div>New chat<small>Start the conversation over</small></div></div>',
-                     new_chat, label="New chat")
+            tappable("pl_chat", f'<div class="pl-row pressable"><i>{svg("edit", 18)}</i><div>New search<small>Clear this and go back to Home</small></div></div>',
+                     new_chat, label="New search")
             tappable("pl_ppl", f'<div class="pl-row pressable"><i>{svg("users", 18)}</i><div>People<small>Open face groups</small></div></div>',
                      go, "people", label="People")
     with st.container(key="composer"):
@@ -1963,17 +1998,17 @@ def drawer():
             if st.button("Close menu", key="scrim_btn"):
                 S.menu = False
                 st.rerun()
-    cur = {"home": "home", "memory": "home", "cleanup": "cleanup", "chat": "chat", "results": "chat", "photos": "photos", "people": "people", "person": "people",
+    cur = {"home": "home", "memory": "home", "cleanup": "cleanup", "chat": "home", "results": "home", "photos": "photos", "people": "people", "person": "people",
            "collections": "collections", "collection": "collections", "settings": "settings"}.get(S.view, "")
     if cur == "photos" and S.hfilter == "Favorites":
         cur = "favorites"
     n_clean = sum(len(v) for v in E.cleanup_groups(visible_rows(), S.kept).values())
     n_att = len(deadline_items())
-    items = [("home", "Home", "home", ""), ("chat", "Ask PixelSense", "sparkle", ""), ("photos", "Photos", "image", ""), ("people", "People", "users", ""),
+    items = [("home", "Home", "home", ""), ("photos", "Photos", "image", ""), ("people", "People", "users", ""),
              ("collections", "Collections", "folder", ""), ("cleanup", "Clean up", "trash", f"{n_clean}" if n_clean else ""), ("favorites", "Favorites", "heart", f"{len(S.fav)}" if S.fav else ""),
              ("settings", "Settings", "shield", "")]
     with st.container(key="drawer" if S.menu else "sidebar"):
-        md(f'<div class="dr-head"><span class="logo-sm" style="background:linear-gradient(135deg,#6A5CF0,#4B3FC7)">{svg("sparkle", 18, "#fff", 1, "#fff")}</span>PixelSense</div>')
+        md(f'<div class="dr-head"><span class="logo-sm">{svg("sparkle", 18, "#fff", 1, "#fff")}</span>PixelSense</div>')
         for key, label, icon, extra in items:
             on = "on" if cur == key else ""
             tappable(f"dr_{key}", f'<div class="dr-row {on} pressable">{svg(icon, 22)}<span>{label}</span><small>{extra}</small></div>',

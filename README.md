@@ -73,7 +73,7 @@ Simulate 3 new photos arriving, and Reset prototype between participants.
 | `study.py` | Evaluation kit: tasks, questionnaires, scoring, CSV logging |
 | `editor.py` | Photo editing |
 | `styles.py` | All CSS, including the Liquid Glass design system |
-| `manifest.csv` | Photo metadata, in-image text, `taken` dates |
+| `manifest.csv` | Photo metadata: `description`, in-image text, `tags` (what is visible), `wearing` (clothing and colours), `taken` dates. Every new photo needs a row with tags, or it cannot be found |
 | `faces.csv` | Face boxes and person groups |
 | `images/` | Sample photos |
 | `make_faces.py`, `make_samples.py` | Data preparation |

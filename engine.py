@@ -38,7 +38,7 @@ CAT_ORDER = ["Travel", "Family", "Bills & Receipts", "Study", "Shopping", "Food"
 CAT_RULES = [  # simulated AI: first matching rule wins (whole words only)
     ("Travel", ["flight", "boarding", "beach", "hiking", "mountains", "sunset", "sea", "trip", "seat", "gate"]),
     ("Family", ["family", "cousins", "wedding", "birthday", "parents", "father", "mother", "daughter", "children"]),
-    ("Study", ["assignment", "lecture", "hci", "cognitive", "lms", "submit", "deadline"]),
+    ("Study", ["assignment", "lecture", "hci", "cognitive", "lms", "submit", "deadline", "notes", "notebook", "handwritten"]),
     ("Shopping", ["sale", "listing", "laptop", "shoes"]),
     ("Food", ["biryani", "food", "cake"]),
     ("Events", ["fest", "poster", "event", "concert"]),
@@ -52,13 +52,14 @@ SUGGESTIONS = ["When is my HCI assignment due?", "Show photos of Person 1", "How
 SYN = {"grocery": ["supermarket", "imtiaz"], "groceries": ["supermarket", "imtiaz"], "trip": ["travel", "beach", "flight"], "pic": ["photo"], "pics": ["photo"], "picture": ["photo"],
        "money": ["rs", "total"], "paid": ["receipt", "total"], "holiday": ["travel", "trip"],
        "shopping": ["sale", "listing"], "assignment": ["hci", "deadline", "submit"], "lecture": ["cognitive", "theory"],
-       "selfie": ["selfie"], "kids": ["children", "daughter"], "wedding": ["family"]}
+       "selfie": ["selfie"], "notes": ["handwritten", "notebook", "lecture"], "notebook": ["notes", "handwritten"], "writing": ["handwritten"],
+       "ocean": ["sea", "coast"], "water": ["sea", "waves"], "sand": ["dunes", "beach"], "crowd": ["street"], "dinner": ["dining"], "glasses": ["glasses"], "kids": ["children", "daughter"], "wedding": ["family"]}
 STOP = {"the", "a", "an", "of", "my", "me", "i", "to", "for", "from", "with", "that", "in", "on", "and", "find",
         "show", "where", "is", "are", "was", "were", "do", "does", "did", "have", "has", "any", "all", "some",
         "please", "can", "you", "give", "get", "look", "up", "what", "when", "who", "whom", "which", "how", "much",
         "many", "there", "this", "these", "those", "it", "its", "at", "by", "about", "photo", "photos", "image",
         "images", "picture", "pictures", "pics", "pic", "total", "amount", "price", "cost", "time", "day", "date",
-        "count", "number", "s", "whats", "who's", "tell", "ask", "mine", "our", "us", "we", "them", "or"}
+        "count", "number", "s", "anyone", "anybody", "someone", "somebody", "everyone", "r", "u", "ur", "pls", "plz", "wearing", "wear", "wears", "wore", "dressed", "having", "got", "show", "me", "photu", "pix", "snaps", "shots", "whats", "who's", "tell", "ask", "mine", "our", "us", "we", "them", "or"}
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
           "november", "december"]
 
@@ -129,20 +130,35 @@ def search_terms(q):
     return out  # term -> word the user typed (None if typed directly)
 
 
+COLORS = {"red", "green", "blue", "pink", "purple", "yellow", "orange", "white", "black", "brown", "grey", "gray", "beige",
+          "gold", "maroon", "olive", "magenta", "cream", "violet"}
+WEAR_RE = re.compile(r"\b(wear|wearing|wears|wore|dressed|clothes|outfit)\b", re.I)
+
+
 def search(ctx, q, rfilter="All", rows=None):
-    """[(score, row, evidence)] best first. Evidence = [(kind, term, origin)]."""
+    """[(score, row, evidence)] best first. Evidence = [(kind, term, origin)].
+    Looks at: text inside the image, what is visible (tags and clothing), the description, then type and collection."""
     terms = search_terms(q)
     typed = [t for t, o in terms.items() if o is None]
+    colours = [t for t in typed if t in COLORS]
+    wear = bool(WEAR_RE.search(q))
     out = []
     for r in (rows if rows is not None else ctx.rows):
         if rfilter not in ("All", "Text in images") and r.type.title() != rfilter:
             continue
+        tags = (getattr(r, "tags", "") + " " + getattr(r, "wearing", "")).lower()
+        if colours:   # a colour is a hard requirement: "wearing green" must not return photos with no green in them
+            hay = getattr(r, "wearing", "").lower() if wear else (tags + " " + r.description.lower() + " " + r.visible_text.lower())
+            if not all(re.search(rf"\b{c}\b", hay) for c in colours):
+                continue
         ev, score, hits = [], 0.0, 0
         meta = (r.type + " " + ctx.cat_of(r)).lower()
         for term, origin in terms.items():
             w = 1.0 if origin is None else 0.5
             if term in r.visible_text.lower():
                 ev.append(("text", term, origin)); score += 4 * w
+            elif re.search(rf"\b{re.escape(term)}", tags):
+                ev.append(("tag", term, origin)); score += 3 * w
             elif term in r.description.lower():
                 ev.append(("desc", term, origin)); score += 2 * w
             elif term in meta:
@@ -165,7 +181,7 @@ def search(ctx, q, rfilter="All", rows=None):
 def ev_sentence(e):
     kind, term, origin = e
     base = {"text": "appears as text inside this image", "desc": "matches the image description",
-            "meta": "matches its type or collection"}[kind]
+            "meta": "matches its type or collection", "tag": "matches what is visible in the image"}[kind]
     return f"Related word “{term}” (from “{origin}”) {base}" if origin else f"“{term}” {base}"
 
 
@@ -412,7 +428,18 @@ def answer_find(ctx, q, allow_count=True):  # noqa: C901
         extra = " Try fewer words, or a person, month or type like “receipts”." if allow_count else ""
         return Reply("none", f"I couldn’t find anything for “{q}”.{extra}", query=q, chips=["Show my latest photos"],
                      steps=make_steps(ctx, rest, hits, ["Nothing in the AI-readable text or descriptions matched."]))
-    why = "text inside the image" if any(k == "text" for _, _, ev in hits[:3] for k, _, _ in ev) else "descriptions and types"
+    # be honest about words nothing matched ("cat sleeping on a sofa" must not just return the sofa)
+    matched = {(o or t) for _, t, o in hits[0][2]}
+    for h in hits[:5]:
+        matched |= {(o or t) for _, t, o in h[2]}
+    missing = [t for t in typed_only if t not in matched]
+    if missing and len(typed_only) > 1 and (len(typed_only) - len(missing)) * 2 < len(typed_only):
+        ml = ", ".join(f"“{t}”" for t in missing)
+        return Reply("none", f"I couldn’t find {ml} in the photos the AI can read. Try describing what is in the picture, like “people in a field” or “handwritten notes”.",
+                     query=q, chips=["Show my latest photos"] if allow_count else [],
+                     steps=make_steps(ctx, rest, [], [f"Nothing matched {ml}, so I did not guess."]))
+    why = ("text inside the image" if any(k == "text" for _, _, ev in hits[:3] for k, _, _ in ev) else
+           "what is visible in the photos" if any(k == "tag" for _, _, ev in hits[:3] for k, _, _ in ev) else "descriptions and types")
     bits = [f"Matched on {why}."]
     if pids:
         bits.insert(0, f"Used the face group for {', '.join(person_label(ctx, p) for p in pids)}.")
@@ -422,8 +449,9 @@ def answer_find(ctx, q, allow_count=True):  # noqa: C901
     when = f" taken in {MONTHS[mon - 1].title()}" if mon else ""
     kind_word = (type_filter + "s") if (type_filter and not typed_only) else "photos"
     n = len(ids)
+    part = (f" Nothing matched {', '.join('“' + t + '”' for t in missing)}, so these are partial matches." if missing else "")
     return Reply("results", f"I found **{n}** {kind_word if n != 1 else kind_word.rstrip('s')}{what}{when}"
-                 + (" (favourites)" if favs else "") + ".", ids=ids, query=q,
+                 + (" (favourites)" if favs else "") + "." + part, ids=ids, query=q,
                  chips=["Save these as a collection"] if allow_count else [],
                  steps=make_steps(ctx, rest, hits, bits))
 
@@ -583,8 +611,10 @@ def register_copy(rec):
     out.parent.mkdir(exist_ok=True)
     im = editor.apply(Image.open(ROOT / src.file), rec["ops"])
     im.save(out, "JPEG", quality=92)
-    row = [rec["id"], f"edited/{rec['id']}.jpg", src.type, f"{src.description} (edited)", src.visible_text, src.album, "",
-           datetime.now().strftime("%Y-%m-%d")]
+    row = {"id": rec["id"], "file": f"edited/{rec['id']}.jpg", "type": src.type, "description": f"{src.description} (edited)",
+           "visible_text": src.visible_text, "album": src.album, "suggested_label": "", "taken": datetime.now().strftime("%Y-%m-%d"),
+           "last_opened": "", "tags": getattr(src, "tags", ""), "wearing": getattr(src, "wearing", "")}
+    row = [row.get(c, "") for c in df.columns]
     df.loc[(df.index.max() + 1) if len(df) else 0] = row   # new label, never reuses one left by a dropped copy
     R[rec["id"]] = next(df.iloc[[-1]].itertuples())
     AUTO[rec["id"]] = ("Everyday", "you saved it as an edited copy")
@@ -681,18 +711,18 @@ def when_words(days):
     return "today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days"
 
 
-MONTHS = "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
+MON_ABBR = "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"   # (was a second "MONTHS", which broke the month filter above)
 
 
 def parse_pasted(text, today):
     """Find a date and an amount in pasted text (an SMS, an email, a chat message). Same idea as reading a photo,
     but for deadlines that never became a picture. Returns None when no date is found, so nothing is guessed."""
-    m = re.search(rf"(\d{{1,2}})\s*(?:st|nd|rd|th)?\s+({MONTHS})[a-z]*", text, re.I) or None
+    m = re.search(rf"(\d{{1,2}})\s*(?:st|nd|rd|th)?\s+({MON_ABBR})[a-z]*", text, re.I) or None
     day = mon = None
     if m:
         day, mon = int(m.group(1)), m.group(2)
     else:
-        m2 = re.search(rf"({MONTHS})[a-z]*\s+(\d{{1,2}})", text, re.I)
+        m2 = re.search(rf"({MON_ABBR})[a-z]*\s+(\d{{1,2}})", text, re.I)
         if m2:
             mon, day = m2.group(1), int(m2.group(2))
     if not day:
