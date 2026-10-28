@@ -3,10 +3,10 @@
 # Streamlit switched its default text colour to white.
 [theme]
 base = "light"
-primaryColor = "#5B4FD6"
-backgroundColor = "#F5F6FB"
+primaryColor = "#4F46C6"
+backgroundColor = "#F4F5FB"
 secondaryBackgroundColor = "#FFFFFF"
-textColor = "#1F2140"
+textColor = "#1B1D3A"
 font = "sans serif"
 
 [client]
