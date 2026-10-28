@@ -962,3 +962,10 @@ CSS = CSS + r"""
 [class*="st-key-topbar_"] [data-testid="stColumn"]:last-child:not(:first-child){flex:1 1 auto!important;width:auto!important;min-width:110px!important}
 [class*="st-key-homebtn_"] .stButton>button{white-space:nowrap}
 """
+
+# editor: prompt row and example chips
+CSS += """
+.st-key-chips_edit [data-testid="stHorizontalBlock"]{gap:8px!important;flex-wrap:wrap!important}
+.st-key-chips_edit [data-testid="stColumn"]{flex:0 0 auto!important;width:auto!important;min-width:0!important}
+.st-key-chips_edit .stButton>button{min-height:34px;padding:0 14px;font-size:13px;width:auto}
+"""

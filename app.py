@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image, ImageOps
 
 import analytics as AN
@@ -1575,10 +1576,102 @@ def view_detail():
 
 
 # ---- photo editor ------------------------------------------------------------------------------------------
+_CROP_FRAME = components.declare_component("crop_frame", path=str(ROOT / "crop_frame"))
+ED_EXAMPLES = [("Brighter", "make it brighter"), ("B&W", "make it black and white"),
+               ("Square crop", "crop to a square"), ("Vintage", "give it a vintage look")]
+
+
 def pil_uri(im, q=88):
     buf = io.BytesIO()
     im.convert("RGB").save(buf, "JPEG", quality=q)
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def ed_size(i):
+    return ImageOps.exif_transpose(Image.open(ROOT / R[i].file)).size
+
+
+def ed_default_crop(i, asp, rot):
+    """Centred frame with the chosen ratio, on the rotated photo, as percent trimmed from (left, top, right, bottom)."""
+    w, h = ed_size(i)
+    if rot in (90, 270):
+        w, h = h, w
+    ratio = ED.ASPECTS.get(asp)
+    if not ratio:
+        return (0.0, 0.0, 0.0, 0.0)
+    if w / h > ratio:
+        trim = round((1 - (h * ratio) / w) / 2 * 100, 2)
+        return (trim, 0.0, trim, 0.0)
+    trim = round((1 - (w / ratio) / h) / 2 * 100, 2)
+    return (0.0, trim, 0.0, trim)
+
+
+def ed_reframe():
+    """Put the crop frame back to the default for the current ratio and rotation (also tells the frame widget to redraw)."""
+    S.ed_crop = ed_default_crop(S.sel, S.get("ed_asp", "Original"), S.get("ed_rot", 0))
+    S.ed_nonce = S.get("ed_nonce", 0) + 1
+
+
+def ed_reset():
+    for k in [k for k in S.keys() if str(k).startswith("ed_") and k not in ("ed_dest", "ed_nonce")]:
+        del S[k]
+    S.ed_nonce = S.get("ed_nonce", 0) + 1
+
+
+def ed_show_frame():
+    S.ed_view = "Crop frame"
+
+
+def ed_show_preview():
+    S.ed_view = "Preview"
+
+
+ED_HELP = ("I can change brightness, contrast, colour, warmth, sharpness, black & white, sepia, vintage, rotate, flip, crop "
+           "(square, 4:3, 16:9 …) and upscale 2x or 4x. Try “warmer and sharper” or “rotate right and crop to 16:9”.")
+
+
+def ed_prompt_apply(text=None):
+    """Turn a typed request into slider / crop settings. Runs as a callback, so it only sets state; the controls then show the result."""
+    t = (text if text is not None else S.get("ed_prompt", "")).strip()
+    S["ed_prompt"] = ""
+    if not t:
+        return
+    track("edit_prompt", words=len(t.split()))
+    if re.search(r"\b(reset|start over|revert|undo (all|everything)|original)\b", t, re.I) and not ED.parse_edit(t):
+        ed_reset()
+        S.ed_msg = ("ok", "Back to the original photo.")
+        return
+    parsed = ED.parse_edit(t) or ED.parse_edit("make it " + t)   # allow bare requests such as "black and white"
+    if not parsed:
+        S.ed_msg = ("warn", "I couldn’t turn that into an edit. " + ED_HELP)
+        return
+    o = parsed[0]
+
+    def add(key, delta, lo, hi):
+        S[key] = max(lo, min(hi, int(S.get(key, 0)) + int(delta)))
+
+    if o["auto"]:
+        S["ed_auto"] = True
+    if o["brightness"]: add("ed_b", o["brightness"], -50, 50)
+    if o["contrast"]: add("ed_c", o["contrast"], -50, 50)
+    if o["saturation"]: add("ed_sat", o["saturation"], -60, 60)
+    if o["warmth"]: add("ed_warm", o["warmth"], -50, 50)
+    if o["sharpness"]: add("ed_sharp", o["sharpness"], -50, 100)
+    if o["filter"] != "None": S["ed_look"] = o["filter"]
+    if o["scale"] > 1: S["ed_sc"] = o["scale"]
+    needs_frame = False
+    if o["rotate"]:
+        S["ed_rot"] = (int(S.get("ed_rot", 0)) + o["rotate"]) % 360
+        needs_frame = True
+    if o["flip"]:
+        S["ed_flip"] = not S.get("ed_flip", False)
+        needs_frame = True
+    if o["aspect"] != "Original":
+        S["ed_asp"] = o["aspect"]
+        needs_frame = True
+    if needs_frame:
+        ed_reframe()
+    S.ed_msg = ("ok", "Done: " + ", ".join(ED.describe(o)) + ". Fine-tune below, then save a copy.")
 
 
 def view_edit():
@@ -1588,9 +1681,60 @@ def view_edit():
     topbar("Edit photo", "detail", "edit")
     snack_ui()
     src = Image.open(ROOT / r.file)
+    small = ImageOps.exif_transpose(src).convert("RGB")
+    small.thumbnail((1100, 1100))
+    nonce = S.get("ed_nonce", 0)
     with st.container(key="stack_edit"):
         left, right = st.columns([5, 4])
+
+        # ---- left: the photo. "Crop frame" shows a draggable frame, "Preview" shows the live result ----
+        with left:
+            if "ed_view" not in S:
+                S["ed_view"] = "Crop frame"     # open straight into the draggable crop box
+            st.radio("View", ["Crop frame", "Preview"], horizontal=True, key="ed_view", label_visibility="collapsed")
+            crop_mode = S.get("ed_view") == "Crop frame"
+            if crop_mode:
+                rot_now, flip_now = S.get("ed_rot", 0), S.get("ed_flip", False)
+                # show the photo with every other edit applied, so you crop what you will actually get
+                base = ED.apply(small, ED.new_ops(
+                    brightness=S.get("ed_b", 0), contrast=S.get("ed_c", 0), saturation=S.get("ed_sat", 0),
+                    warmth=S.get("ed_warm", 0), sharpness=S.get("ed_sharp", 0), auto=S.get("ed_auto", False),
+                    filter=S.get("ed_look", "None"), rotate=rot_now, flip=flip_now))
+                fw, fh = ed_size(r.id)
+                if rot_now in (90, 270):
+                    fw, fh = fh, fw
+                v = _CROP_FRAME(img=pil_uri(base, 85), crop=list(S.get("ed_crop", (0.0, 0.0, 0.0, 0.0))),
+                                ratio=ED.ASPECTS.get(S.get("ed_asp", "Original")), nonce=nonce, full_w=fw, full_h=fh,
+                                key="ed_cropper", default=None)
+                if isinstance(v, dict) and v.get("nonce") == nonce and v.get("crop"):
+                    S.ed_crop = tuple(float(x) for x in v["crop"])
+                d1, d2 = st.columns(2)
+                with d1:
+                    st.button("Reset frame", key="ed_frame_reset", on_click=ed_reframe)
+                with d2:
+                    st.button("Done cropping", key="ed_frame_done", type="primary", on_click=ed_show_preview)
+            else:
+                show_orig = st.toggle("Show original", key="ed_orig")
+                preview_slot = st.empty()
+
+        # ---- right: prompt, then the manual controls ----
         with right:
+            pc1, pc2 = st.columns([5, 2])
+            with pc1:
+                st.text_input("Edit with a prompt", key="ed_prompt", on_change=ed_prompt_apply,
+                              placeholder="e.g. make it brighter and crop to a square")
+            with pc2:
+                md('<div style="height:28px"></div>')
+                st.button("Apply", key="ed_prompt_go", type="primary", on_click=ed_prompt_apply)
+            with st.container(key="chips_edit"):
+                ec = st.columns(len(ED_EXAMPLES))
+                for col, (label, text) in zip(ec, ED_EXAMPLES):
+                    with col:
+                        st.button(label, key=f"ed_ex_{slug(label)}", on_click=ed_prompt_apply, args=(text,))
+            msg = S.get("ed_msg")
+            if msg:
+                md(f'<div class="ccount" style="margin:4px 0 8px">{esc(msg[1])}</div>')
+
             t_adj, t_crop, t_look, t_res = st.tabs(["Adjust", "Crop & rotate", "Filters", "Resolution"])
             with t_adj:
                 auto = st.toggle("Auto-enhance", key="ed_auto")
@@ -1600,43 +1744,27 @@ def view_edit():
                 warm = st.slider("Warmth", -50, 50, 0, key="ed_warm")
                 sharp = st.slider("Sharpness", -50, 100, 0, key="ed_sharp")
             with t_crop:
-                asp = st.selectbox("Aspect ratio", list(ED.ASPECTS), key="ed_asp")
-                st.caption("Trim the edges (%)")
-                k1, k2 = st.columns(2)
-                with k1:
-                    tl = st.slider("Left", 0, 40, 0, key="ed_tl")
-                    tt = st.slider("Top", 0, 40, 0, key="ed_tt")
-                with k2:
-                    tr = st.slider("Right", 0, 40, 0, key="ed_tr")
-                    tb = st.slider("Bottom", 0, 40, 0, key="ed_tb")
-                rot = st.radio("Rotate", [0, 90, 180, 270], horizontal=True, format_func=lambda d: f"{d}°", key="ed_rot")
-                flip = st.toggle("Flip horizontally", key="ed_flip")
+                asp = st.selectbox("Crop shape", list(ED.ASPECTS), key="ed_asp", on_change=ed_reframe,
+                                   help="Original = free crop. Any other choice locks the frame to that ratio.")
+                st.button("Crop with the frame", key="ed_open_frame", on_click=ed_show_frame, disabled=crop_mode)
+                rot = st.radio("Rotate", [0, 90, 180, 270], horizontal=True, format_func=lambda d: f"{d}°", key="ed_rot", on_change=ed_reframe)
+                flip = st.toggle("Flip horizontally", key="ed_flip", on_change=ed_reframe)
+                st.caption("Rotating, flipping or changing the crop shape puts the frame back in the centre.")
             with t_look:
                 look = st.radio("Look", ED.FILTERS, horizontal=True, key="ed_look")
             with t_res:
                 sc = st.radio("Output size", [1, 2, 4], horizontal=True, format_func=lambda x: "Original" if x == 1 else f"{x}x larger", key="ed_sc")
                 st.caption("Resizes with high-quality resampling and gentle sharpening. It cannot invent detail the way a generative AI would.")
-        ops = ED.new_ops(brightness=b, contrast=c, saturation=sat, warmth=warm, sharpness=sharp, auto=auto, aspect=asp,
-                         crop=(tl, tt, tr, tb), rotate=rot, flip=flip, filter=look, scale=sc)
-        with left:
-            show_orig = st.toggle("Show original", key="ed_orig")
-            small = ImageOps.exif_transpose(src).convert("RGB")
-            small.thumbnail((1100, 1100))
-            shown = small if show_orig else ED.apply(small, {**ops, "scale": 1})
-            md(f'<div class="edprev"><img src="{pil_uri(shown)}" alt="Preview"></div>')
-            done = ED.describe(ops)
-            md(f'<div class="ccount" style="margin-top:2px">{esc(", ".join(done).capitalize()) if done else "No changes yet"} · original {src.size[0]}×{src.size[1]} px'
-               + (f' · saved copy will be {min(sc, 4096 / max(src.size)) * max(src.size):.0f}px on the long side' if sc > 1 else "") + '</div>')
-        with right:
+
+            crop = tuple(S.get("ed_crop", (0.0, 0.0, 0.0, 0.0)))
+            ops = ED.new_ops(brightness=b, contrast=c, saturation=sat, warmth=warm, sharpness=sharp, auto=auto, aspect="Original",
+                             crop=crop, rotate=rot, flip=flip, filter=look, scale=sc)
             opts = ["Edited"] + [x for x in all_cats() if x not in S.excluded_cats and x != "Edited"]
             dest = st.selectbox("Save copy to collection", opts, key="ed_dest")
             with st.container(key="edact"):
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button("Reset", key="ed_reset"):
-                        for k in [k for k in S.keys() if str(k).startswith("ed_") and k != "ed_dest"]:
-                            del S[k]
-                        st.rerun()
+                    st.button("Reset", key="ed_reset", on_click=ed_reset)
                 with c2:
                     if st.button("Save as copy", type="primary", key="ed_save", disabled=ED.is_default(ops)):
                         snap()
@@ -1650,6 +1778,16 @@ def view_edit():
                     ED.apply(src, ops).save(buf, "JPEG", quality=92)
                     st.download_button("Download edited photo", buf.getvalue(), file_name=f"{r.id}_edited.jpg", mime="image/jpeg", key="ed_dl")
             md('<div class="ccount">Edits never change your original. Saving makes a new copy you can undo.</div>')
+
+        # ---- fill the preview now that every setting is known ----
+        if not crop_mode:
+            with left:
+                shown = small if show_orig else ED.apply(small, {**ops, "scale": 1})
+                with preview_slot.container():
+                    md(f'<div class="edprev"><img src="{pil_uri(shown)}" alt="Preview"></div>')
+                    done = ED.describe(ops)
+                    md(f'<div class="ccount" style="margin-top:2px">{esc(", ".join(done).capitalize()) if done else "No changes yet"} · original {src.size[0]}×{src.size[1]} px'
+                       + (f' · saved copy will be {min(sc, 4096 / max(src.size)) * max(src.size):.0f}px on the long side' if sc > 1 else '') + '</div>')
 
 
 # ---- collections ----------------------------------------------------------------------------------------

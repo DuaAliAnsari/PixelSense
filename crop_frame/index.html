@@ -1,0 +1,169 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; font-family: "Source Sans Pro", system-ui, sans-serif; }
+  #wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 2px 0 4px; }
+  #stage { position: relative; display: inline-block; line-height: 0; overflow: hidden; border-radius: 18px;
+           background: #E9EAF4; box-shadow: 0 12px 30px rgba(31,33,64,.16); touch-action: none; user-select: none; }
+  #img { display: block; max-width: 100%; max-height: 520px; width: auto; height: auto; -webkit-user-drag: none; }
+  #frame { position: absolute; box-sizing: border-box; border: 2px solid #fff; cursor: move; outline: none;
+           box-shadow: 0 0 0 9999px rgba(20,22,48,.58); touch-action: none; }
+  #frame:focus-visible { border-color: #B8B0FF; }
+  .grid { position: absolute; inset: 0; pointer-events: none;
+          background:
+            linear-gradient(to right, transparent calc(33.33% - .5px), rgba(255,255,255,.55) calc(33.33% - .5px), rgba(255,255,255,.55) calc(33.33% + .5px), transparent calc(33.33% + .5px),
+                                    transparent calc(66.66% - .5px), rgba(255,255,255,.55) calc(66.66% - .5px), rgba(255,255,255,.55) calc(66.66% + .5px), transparent calc(66.66% + .5px)),
+            linear-gradient(to bottom, transparent calc(33.33% - .5px), rgba(255,255,255,.55) calc(33.33% - .5px), rgba(255,255,255,.55) calc(33.33% + .5px), transparent calc(33.33% + .5px),
+                                    transparent calc(66.66% - .5px), rgba(255,255,255,.55) calc(66.66% - .5px), rgba(255,255,255,.55) calc(66.66% + .5px), transparent calc(66.66% + .5px)); }
+  .h { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; touch-action: none; z-index: 2; }
+  .h::after { content: ""; position: absolute; left: 4px; top: 4px; width: 14px; height: 14px; background: #fff; border: 2px solid #5B4FD6;
+              border-radius: 4px; box-sizing: border-box; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  .h.e::after, .h.w::after { height: 20px; top: 1px; width: 8px; left: 7px; border-radius: 4px; }
+  .h.n::after, .h.s::after { width: 20px; left: 1px; height: 8px; top: 7px; border-radius: 4px; }
+  .h.nw { left: 0; top: 0; cursor: nwse-resize; } .h.ne { left: 100%; top: 0; cursor: nesw-resize; }
+  .h.sw { left: 0; top: 100%; cursor: nesw-resize; } .h.se { left: 100%; top: 100%; cursor: nwse-resize; }
+  .h.n { left: 50%; top: 0; cursor: ns-resize; } .h.s { left: 50%; top: 100%; cursor: ns-resize; }
+  .h.w { left: 0; top: 50%; cursor: ew-resize; } .h.e { left: 100%; top: 50%; cursor: ew-resize; }
+  body.locked .h.n, body.locked .h.s, body.locked .h.w, body.locked .h.e { display: none; }
+  #info { font-size: 13px; font-weight: 600; color: #555A75; line-height: 1.3; text-align: center; }
+  #info b { color: #1F2140; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <img id="img" alt="Photo to crop" draggable="false">
+    <div id="frame" tabindex="0" role="group" aria-label="Crop frame. Drag to move, drag the handles to resize, or use the arrow keys to move.">
+      <div class="grid"></div>
+      <div class="h nw" data-h="nw"></div><div class="h n" data-h="n"></div><div class="h ne" data-h="ne"></div>
+      <div class="h w" data-h="w"></div><div class="h e" data-h="e"></div>
+      <div class="h sw" data-h="sw"></div><div class="h s" data-h="s"></div><div class="h se" data-h="se"></div>
+    </div>
+  </div>
+  <div id="info">Drag the frame to move it, drag a handle to resize.</div>
+</div>
+
+<script>
+(function () {
+  var MIN = 0.06;                       // smallest frame side, as a fraction of the image
+  var img = document.getElementById("img"), stage = document.getElementById("stage"),
+      frame = document.getElementById("frame"), info = document.getElementById("info");
+  var f = { l: 0, t: 0, r: 1, b: 1 };   // frame edges as fractions of the image
+  var ratio = null, nonce = null, imgSrc = null, fullW = 0, fullH = 0, seq = 0, drag = null;
+
+  function send(type, data) {
+    window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data), "*");
+  }
+  function setHeight() { send("streamlit:setFrameHeight", { height: document.documentElement.scrollHeight + 4 }); }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function draw() {
+    frame.style.left = (f.l * 100) + "%";  frame.style.top = (f.t * 100) + "%";
+    frame.style.width = ((f.r - f.l) * 100) + "%"; frame.style.height = ((f.b - f.t) * 100) + "%";
+    if (fullW) {
+      var w = Math.round((f.r - f.l) * fullW), h = Math.round((f.b - f.t) * fullH);
+      info.innerHTML = "Crop size <b>" + w + " × " + h + " px</b>" + (ratio ? "  ·  ratio locked" : "  ·  free crop (pick a ratio to lock it)");
+    }
+  }
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function emit() {
+    seq += 1;
+    send("streamlit:setComponentValue", {
+      dataType: "json",
+      value: { crop: [r2(f.l * 100), r2(f.t * 100), r2((1 - f.r) * 100), r2((1 - f.b) * 100)], nonce: nonce, seq: seq }
+    });
+  }
+  function ptr(e) {                      // pointer position as fractions of the displayed image
+    var rc = img.getBoundingClientRect();
+    return { x: clamp((e.clientX - rc.left) / rc.width, 0, 1), y: clamp((e.clientY - rc.top) / rc.height, 0, 1), rc: rc };
+  }
+  function fracRatio() {                 // frame width/height expressed in fractions of the image
+    var rc = img.getBoundingClientRect();
+    return ratio * rc.height / rc.width;
+  }
+
+  function start(e, mode) {
+    e.preventDefault(); e.stopPropagation();
+    var p = ptr(e);
+    drag = { mode: mode, id: e.pointerId, offX: p.x - f.l, offY: p.y - f.t, w: f.r - f.l, h: f.b - f.t };
+    try { e.target.setPointerCapture(e.pointerId); } catch (x) {}
+  }
+  function move(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var p = ptr(e), m = drag.mode;
+    if (m === "move") {
+      f.l = clamp(p.x - drag.offX, 0, 1 - drag.w); f.t = clamp(p.y - drag.offY, 0, 1 - drag.h);
+      f.r = f.l + drag.w; f.b = f.t + drag.h;
+    } else if (ratio && m.length === 2) {                      // corner with a locked ratio: opposite corner stays put
+      var rf = fracRatio();
+      var ax = m.indexOf("w") >= 0 ? f.r : f.l, ay = m.indexOf("n") >= 0 ? f.b : f.t;
+      var toRight = p.x >= ax, toDown = p.y >= ay;
+      var w = Math.max(Math.abs(p.x - ax), Math.abs(p.y - ay) * rf);
+      var maxW = Math.min(toRight ? 1 - ax : ax, (toDown ? 1 - ay : ay) * rf);
+      w = clamp(w, Math.min(MIN, maxW), maxW);
+      var h = w / rf;
+      f.l = toRight ? ax : ax - w; f.r = toRight ? ax + w : ax;
+      f.t = toDown ? ay : ay - h;  f.b = toDown ? ay + h : ay;
+    } else {                                                    // free resize
+      if (m.indexOf("w") >= 0) f.l = clamp(p.x, 0, f.r - MIN);
+      if (m.indexOf("e") >= 0) f.r = clamp(p.x, f.l + MIN, 1);
+      if (m.indexOf("n") >= 0) f.t = clamp(p.y, 0, f.b - MIN);
+      if (m.indexOf("s") >= 0) f.b = clamp(p.y, f.t + MIN, 1);
+    }
+    draw();
+  }
+  function end(e) {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    drag = null; emit();
+  }
+
+  frame.addEventListener("pointerdown", function (e) {
+    var h = e.target.getAttribute && e.target.getAttribute("data-h");
+    start(e, h || "move");
+  });
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+  frame.addEventListener("keydown", function (e) {
+    var step = e.shiftKey ? 0.05 : 0.01, dx = 0, dy = 0;
+    if (e.key === "ArrowLeft") dx = -step; else if (e.key === "ArrowRight") dx = step;
+    else if (e.key === "ArrowUp") dy = -step; else if (e.key === "ArrowDown") dy = step; else return;
+    e.preventDefault();
+    var w = f.r - f.l, h = f.b - f.t;
+    f.l = clamp(f.l + dx, 0, 1 - w); f.t = clamp(f.t + dy, 0, 1 - h); f.r = f.l + w; f.b = f.t + h;
+    draw();
+    clearTimeout(frame._k); frame._k = setTimeout(emit, 350);
+  });
+
+  function setFromCrop(c) {
+    c = c || [0, 0, 0, 0];
+    f = { l: c[0] / 100, t: c[1] / 100, r: 1 - c[2] / 100, b: 1 - c[3] / 100 };
+    if (f.r - f.l < MIN || f.b - f.t < MIN) f = { l: 0, t: 0, r: 1, b: 1 };
+  }
+
+  window.addEventListener("message", function (ev) {
+    if (!ev.data || ev.data.type !== "streamlit:render") return;
+    var a = ev.data.args || {};
+    ratio = a.ratio || null; fullW = a.full_w || 0; fullH = a.full_h || 0;
+    document.body.classList.toggle("locked", !!ratio);
+    var changed = (a.img !== imgSrc), reset = (a.nonce !== nonce);
+    nonce = a.nonce;
+    if (changed) {
+      imgSrc = a.img; img.onload = function () { setFromCrop(a.crop); draw(); setHeight(); }; img.src = a.img;
+    } else if (reset) {
+      setFromCrop(a.crop); draw();
+    } else {
+      draw();
+    }
+    setHeight();
+  });
+
+  window.addEventListener("resize", setHeight);
+  send("streamlit:componentReady", { apiVersion: 1 });
+  setHeight();
+})();
+</script>
+</body>
+</html>
