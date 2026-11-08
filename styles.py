@@ -308,7 +308,6 @@ details.how ol{margin:6px 0 4px;padding-left:18px;line-height:1.55}
 .consent h3{margin:0 0 6px;font-size:18px;font-weight:800;letter-spacing:-.4px;color:#1F2140}
 .consent p{margin:0 0 4px;font-size:13.5px;line-height:1.55;color:#4D5170}
 .st-key-actionbar [data-testid="stColumn"]:first-child{flex:0 0 56px!important;width:56px!important;min-width:56px!important}
-.st-key-favbtn button{font-size:22px;padding:0;color:#D6455D}
 @media (max-width:480px){.st-key-composer,.st-key-actionbar,.st-key-navbar{width:100vw!important}}
 
 /* =====================  DESKTOP / FULL-PAGE LAYOUT  =====================
@@ -968,4 +967,57 @@ CSS += """
 .st-key-chips_edit [data-testid="stHorizontalBlock"]{gap:8px!important;flex-wrap:wrap!important}
 .st-key-chips_edit [data-testid="stColumn"]{flex:0 0 auto!important;width:auto!important;min-width:0!important}
 .st-key-chips_edit .stButton>button{min-height:34px;padding:0 14px;font-size:13px;width:auto}
+"""
+
+CSS = CSS + r"""
+/* ---------- select & delete: tick square on every photo, action bar above the grid ---------- */
+[class*="st-key-selcell_"]{position:relative}
+[class*="st-key-selcell_"] [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]),
+[class*="st-key-selcell_"] .element-container:has([data-testid="stCheckbox"]){
+  position:absolute!important;top:-10px;left:-10px;z-index:20;width:auto!important;height:auto!important;margin:0!important}
+[class*="st-key-selcell_"] [data-testid="stCheckbox"]{width:auto!important;min-height:0!important}
+/* no white plate: everything around the square is see-through; the square itself is drawn by ::before/::after */
+[class*="st-key-selcell_"] [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]),
+[class*="st-key-selcell_"] [data-testid="stCheckbox"],[class*="st-key-selcell_"] [data-testid="stCheckbox"] *{background:transparent!important;box-shadow:none!important;border-color:transparent!important}
+[class*="st-key-selcell_"] [data-testid="stCheckbox"] label{position:relative;display:block!important;width:24px!important;height:24px!important;min-height:0!important;padding:0!important;margin:0!important;cursor:pointer}
+[class*="st-key-selcell_"] [data-testid="stCheckbox"] label>span:first-child{position:absolute!important;inset:0;width:100%!important;height:100%!important;opacity:0}
+[class*="st-key-selcell_"] [data-testid="stCheckbox"] label>div{display:none!important}
+[class*="st-key-selcell_"] [data-testid="stCheckbox"] label::before{content:"";position:absolute;inset:0;border-radius:7px;box-sizing:border-box;
+  border:2px solid rgba(255,255,255,.95);background:rgba(255,255,255,.14)!important;box-shadow:0 0 0 1px rgba(31,33,64,.28),0 1px 4px rgba(31,33,64,.3)!important;pointer-events:none}
+[class*="st-key-selcell_"] [data-testid="stCheckbox"] label:has(input:checked)::before{background:rgba(91,79,214,.92)!important}
+[class*="st-key-selcell_"] [data-testid="stCheckbox"] label:has(input:checked)::after{content:"\2713";position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:15px;font-weight:800;pointer-events:none}
+[class*="st-key-selcell_"]:has(input:checked) .tile{outline:3px solid #5B4FD6;outline-offset:-3px}
+
+[class*="st-key-selbar_"]{margin:8px 0 4px}
+[class*="st-key-selbar_"] [data-testid="stHorizontalBlock"]{align-items:center;gap:10px!important}
+[class*="st-key-selbar_"] .stButton>button{min-height:40px;border-radius:999px;font-size:13.5px;white-space:nowrap}
+[class*="st-key-selbar_"] [class*="st-key-danger"] .stButton>button{min-width:0!important;width:100%!important}
+.selinfo{font-size:13.5px;color:#6B6F8C;font-weight:600}.selinfo b{color:#1F2140}
+@media (max-width:760px){
+  [class*="st-key-selbar_"] [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important}
+  [class*="st-key-selbar_"] [data-testid="stColumn"]{flex:1 1 auto!important;width:auto!important;min-width:0!important}
+}
+
+/* selection bar: buttons packed at the right end, in line with the "N photos" label */
+[class*="st-key-selbar_"] [data-testid="stHorizontalBlock"]{justify-content:flex-end}
+[class*="st-key-selbar_"] [data-testid="stColumn"]{flex:0 0 auto!important;width:auto!important;min-width:0!important}
+[class*="st-key-selbar_"] [data-testid="stColumn"]:first-child{flex:1 1 auto!important}
+[class*="st-key-selbar_"] .stButton{width:auto!important}
+[class*="st-key-selbar_"] .stButton>button{width:auto!important;min-width:0!important;padding:0 18px}
+
+/* big back arrow and heart: drawn as pictures, because the text glyphs are tiny in this font */
+[class*="st-key-back_"] button,[class*="st-key-favbtn_"] button{position:relative;padding:0!important}
+[class*="st-key-back_"] button p,[class*="st-key-favbtn_"] button p{font-size:0!important;line-height:0!important}
+[class*="st-key-back_"] button::after,[class*="st-key-favbtn_"] button::after{content:"";position:absolute;inset:0;margin:auto;pointer-events:none;
+  background-position:center;background-repeat:no-repeat;background-size:contain}
+[class*="st-key-back_"] button::after{width:26px;height:26px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231F2140' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 12H5M11 5.5 4.5 12l6.5 6.5'/%3E%3C/svg%3E")}
+[class*="st-key-favbtn_"] button::after{width:30px;height:30px}
+.st-key-favbtn_off button::after{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23D6455D' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M12 20s-7-4.4-9-9.2C1.8 7.6 3.9 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.1 0 5.2 3.1 4 6.3-2 4.8-9 9.2-9 9.2z'/%3E%3C/svg%3E")}
+.st-key-favbtn_on button::after{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23D6455D' stroke='%23D6455D' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M12 20s-7-4.4-9-9.2C1.8 7.6 3.9 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.1 0 5.2 3.1 4 6.3-2 4.8-9 9.2-9 9.2z'/%3E%3C/svg%3E")}
+
+/* snack bar: Undo at the right end, in line with the buttons below */
+.st-key-snack [data-testid="stColumn"]:first-child{flex:1 1 auto!important}
+.st-key-snack [data-testid="stColumn"]:last-child{flex:0 0 auto!important;width:auto!important;min-width:0!important}
+.st-key-snack .stButton{width:auto!important;display:flex;justify-content:flex-end}
+.st-key-snack .stButton>button{width:auto!important;min-width:0!important;padding:0 16px!important}
 """

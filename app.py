@@ -51,7 +51,7 @@ HOME_CHIPS = {
 }
 ATTENTION_CHIP = "What needs my attention?"
 ATTENTION_RE = re.compile(r"needs?\s+(my\s+)?attention|what('s| is| are)\s+(due|overdue|coming up)|upcoming|deadlines|overdue|anything due", re.I)
-UNDO_KEYS = ["override", "extra_cats", "excluded_cats", "excluded_imgs", "removed", "names", "hidden_people", "notp", "fav", "kept", "copies", "done", "manual"]
+UNDO_KEYS = ["override", "extra_cats", "excluded_cats", "excluded_imgs", "removed", "names", "hidden_people", "notp", "fav", "kept", "copies", "done", "manual", "deleted_cats"]
 
 ICONS = {
     "home": '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V20h14v-9.5"/><path d="M10 20v-5h4v5"/>',
@@ -108,7 +108,7 @@ S = st.session_state
 def fresh_state():
     return dict(
         view="welcome", back="chat", query="", rfilter="All", hfilter="All", sel=None, cur_coll=None, cur_person=None,
-        override={}, extra_cats=[], excluded_cats={"Sensitive"}, excluded_imgs=set(), removed=set(), arrived=set(),
+        override={}, extra_cats=[], deleted_cats=set(), excluded_cats={"Sensitive"}, excluded_imgs=set(), removed=set(), arrived=set(),
         names={}, hidden_people=set(), notp=set(), faces_on=None, fav=set(), kept=set(), cur_mem=None, copies=[], copy_seq=0, llm_on=False,
         history=[], searches=[], done=set(), study=None, opened=set(), manual=[], manual_seq=0, analytics_on=False, events=[], snack=None, scroll=False, menu=False, plus=False, chat=[], res=None,
     )
@@ -164,7 +164,8 @@ def all_cats():
     base = [c for c in CAT_ORDER if any(a[0] == c for a in AUTO.values())]
     extra = [c for c in S.extra_cats if c not in base]
     sens = ["Sensitive"] if any(a[0] == "Sensitive" for a in AUTO.values()) else []
-    return base + extra + sens
+    gone = S.get("deleted_cats", set())
+    return [c for c in base + extra + sens if c not in gone]
 
 
 def cat_total(c):
@@ -543,6 +544,7 @@ def thumb_head(r, extra):
 def create_collection(name, ids):
     """Shared by the dialog. Moves the photos into the collection (undoable)."""
     snap()
+    S.deleted_cats.discard(name)
     if name not in all_cats():
         S.extra_cats.append(name)
     for i in ids:
@@ -650,6 +652,111 @@ def pause_cat_dialog(name):
             if S.view in ("collection", "detail"):
                 S.view = "collections" if S.view == "collection" else "chat"
             notify(f"AI is paused for “{name}”.")
+            st.rerun()
+
+
+# ---- select & delete (Photos page and every collection) ---------------------------------------------
+def sel_key(scope, i):
+    return f"sel_{scope}_{i}"
+
+
+def tick_all(scope, ids):
+    for i in ids:
+        S[sel_key(scope, i)] = True
+
+
+def untick_all(scope, ids):
+    for i in ids:
+        S[sel_key(scope, i)] = False
+
+
+def select_grid(rows, prefix, scope, n=6):
+    """Like image_grid, but every photo has a tick square in its top-left corner (state lives in the checkbox itself)."""
+    with st.container(key=f"grid{n}_{prefix}"):
+        for k in range(0, len(rows), n):
+            cols = st.columns(n)
+            for c, r in zip(cols, rows[k:k + n]):
+                with c:
+                    with st.container(key=f"selcell_{scope}_{r.id}"):
+                        tappable(f"{prefix}_{r.id}", tile_html(r), open_image, r.id, label=f"Open {r.description}")
+                        st.checkbox(f"Select {r.description}", key=sel_key(scope, r.id), label_visibility="collapsed")
+
+
+def selection_bar(scope, rows, where):
+    """The bar above the photos: Delete all ticks every square; Delete selected asks for confirmation.
+    Buttons sit at the right end (in line with the 'N photos' label), Clear to the left of Delete all."""
+    ids = [r.id for r in rows]
+    picked = [i for i in ids if S.get(sel_key(scope, i))]
+    show = ([("seldel", None), ("selclear", None)] if picked else []) + [("delall", None)]
+    with st.container(key=f"selbar_{scope}"):
+        cols = st.columns([1] + [0.01] * len(show))
+        with cols[0]:
+            md(f'<div class="selinfo">{f"<b>{len(picked)}</b> of {len(ids)} selected" if picked else "Tick a square to choose photos"}</div>')
+        for col, (kind, _) in zip(cols[1:], show):
+            with col:
+                if kind == "seldel":
+                    with st.container(key=f"danger_seldel_{scope}"):
+                        if st.button(f"Delete selected ({len(picked)})", key=f"seldel_{scope}"):
+                            delete_photos_dialog(picked, scope, len(picked) == len(ids), where)
+                elif kind == "selclear":
+                    st.button("Clear", key=f"selclear_{scope}", on_click=untick_all, args=(scope, ids))
+                else:
+                    st.button("Delete all", key=f"delall_{scope}", on_click=tick_all, args=(scope, ids), icon=":material/delete:", disabled=len(picked) == len(ids))
+
+
+@st.dialog("Delete photos?")
+def delete_photos_dialog(ids, scope, everything, where):
+    n = len(ids)
+    s = "s" if n != 1 else ""
+    head = f"Delete all {n} photo{s} in {esc(where)}?" if everything else f"Delete the {n} selected photo{s}?"
+    thumbs = "".join(f'<img src="{img_uri(R[i].file, 96, 72)}" alt="" style="width:56px;height:42px;border-radius:8px;object-fit:cover">' for i in ids[:8])
+    more = f'<span style="align-self:center;font-size:12.5px;color:#6B6F8C">+{n - 8} more</span>' if n > 8 else ""
+    md(f'<div class="info"><p><b>{head}</b></p><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">{thumbs}{more}</div>'
+       '<p>They leave your library, search, People and collections.</p>'
+       '<p>You can undo right after, or restore them in Settings, Recently removed.</p></div>')
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Cancel", key=f"dp_cancel_{scope}"):
+            st.rerun()
+    with c2:
+        if st.button(f"Delete {n} photo{s}", type="primary", key=f"dp_ok_{scope}"):
+            snap()
+            S.removed.update(ids)
+            for i in ids:
+                S.pop(sel_key(scope, i), None)
+            notify(f"{n} photo{s} deleted.")
+            st.rerun()
+
+
+@st.dialog("Delete this collection?")
+def delete_collection_dialog(name):
+    items = coll_items(name)
+    n = len(items)
+    mine = name in S.extra_cats
+    back = " They return to the collection AI sorted them into." if mine else ""
+    md(f'<div class="info"><p><b>“{esc(name)}”</b> has {n} photo{"s" if n != 1 else ""}.</p>'
+       f'<p>The collection will be deleted. <b>By default its photos stay</b> in Photos.{back}</p>'
+       '<p>You can undo right after.</p></div>')
+    also = st.checkbox(f"Also delete the {n} photo{'s' if n != 1 else ''} inside it", key=f"dc_also_{slug(name)}", disabled=not n)
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Cancel", key=f"dc_cancel_{slug(name)}"):
+            st.rerun()
+    with c2:
+        if st.button("Delete collection", type="primary", key=f"dc_ok_{slug(name)}"):
+            snap()
+            if mine:
+                S.extra_cats.remove(name)
+                S.override = {k: v for k, v in S.override.items() if v != name}
+            else:
+                S.deleted_cats.add(name)
+            if also:
+                S.removed.update(items)
+            for i in items:
+                S.pop(sel_key(f"c_{slug(name)}", i), None)
+            S.cur_coll = None
+            notify(f"Collection “{name}” deleted" + (f" with its {n} photo{'s' if n != 1 else ''}." if also else ". Its photos are still in Photos."))
+            S.view = "collections"
             st.rerun()
 
 
@@ -1406,6 +1513,7 @@ def view_photos():
         empty_state("heart" if S.hfilter == "Favorites" else "image", "Nothing here yet",
                     "Tap the heart on a photo to add it here." if S.hfilter == "Favorites" else f"No {S.hfilter.lower()} photos that AI is allowed to use.")
         return
+    selection_bar("photos", rows, "Photos" if S.hfilter == "All" else f"Photos ({S.hfilter})")
     groups = {}
     for r in sorted(rows, key=lambda r: (r.taken, r.id), reverse=True):
         d = E.taken_date(r)
@@ -1413,7 +1521,7 @@ def view_photos():
     for (y, mo), items in groups.items():
         label = date(y, mo, 1).strftime("%B %Y") if y else "Undated"
         md(f'<div class="monthh"><b>{label}</b><span>{len(items)} photo{"s" if len(items) != 1 else ""}</span></div>')
-        image_grid(items, f"t{y}{mo}")
+        select_grid(items, f"t{y}{mo}", "photos")
 
 
 def view_results():
@@ -1561,7 +1669,7 @@ def view_detail():
             if st.button("✎ Edit", key="d_edit"):
                 open_editor(r.id)
         with c0:
-            with st.container(key="favbtn"):
+            with st.container(key="favbtn_on" if r.id in S.fav else "favbtn_off"):
                 if st.button("♥" if r.id in S.fav else "♡", key="d_fav", help="Favorite"):
                     snap()
                     S.fav.symmetric_difference_update({r.id})
@@ -1835,20 +1943,15 @@ def view_collection():
     items = [R[i] for i in coll_items(name)]
     md(f'<div class="sub" style="margin-top:0">{len(items)} item{"s" if len(items) != 1 else ""}</div>')
     if items:
-        image_grid(items, "cg")
+        selection_bar(f"c_{slug(name)}", items, f"“{name}”")
+        select_grid(items, "cg", f"c_{slug(name)}")
     else:
         empty_state("folder", "This collection is empty", "Open any photo and choose “Move to…”, or ask me to fill it.")
     md('<div style="height:8px"></div>')
-    if name in S.extra_cats:
-        with st.container(key="danger_delcoll"):
-            if st.button("Delete collection", key="coll_del"):
-                snap()
-                S.extra_cats.remove(name)
-                S.override = {k: v for k, v in S.override.items() if v != name}
-                notify(f"Collection “{name}” deleted. Its photos went back to AI’s choice.")
-                S.view = "collections"
-                st.rerun()
-    else:
+    with st.container(key="danger_delcoll"):
+        if st.button("Delete collection", key="coll_del"):
+            delete_collection_dialog(name)
+    if name not in S.extra_cats:
         with st.container(key="danger_pause"):
             if st.button("Pause AI for this collection", key="coll_pause"):
                 pause_cat_dialog(name)
