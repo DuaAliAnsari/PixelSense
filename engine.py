@@ -6,10 +6,11 @@ in manifest.csv / faces.csv, and answers are extracted from that prepared text. 
 """
 from __future__ import annotations
 
+import difflib
 import os
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -34,20 +35,29 @@ FACES_IN: dict[str, list[str]] = {}
 for _r in FACES.itertuples():
     FACES_IN.setdefault(_r.image_id, []).append(_r.person_id)
 
-CAT_ORDER = ["Travel", "Family", "Bills & Receipts", "Study", "Shopping", "Food", "Events", "Everyday"]
-CAT_RULES = [  # simulated AI: first matching rule wins (whole words only)
-    ("Travel", ["flight", "boarding", "beach", "hiking", "mountains", "sunset", "sea", "trip", "seat", "gate"]),
-    ("Family", ["family", "cousins", "wedding", "birthday", "parents", "father", "mother", "daughter", "children"]),
-    ("Study", ["assignment", "lecture", "hci", "cognitive", "lms", "submit", "deadline", "notes", "notebook", "handwritten"]),
-    ("Shopping", ["sale", "listing", "laptop", "shoes"]),
-    ("Food", ["biryani", "food", "cake"]),
+PEOPLE = pd.read_csv(ROOT / "people.csv").fillna("") if (ROOT / "people.csv").exists() else pd.DataFrame(columns=["person_id", "name", "is_me"])
+PRESET_NAMES = {r.person_id: r.name for r in PEOPLE.itertuples() if r.name and r.person_id in PERSON_IMAGES}   # names the account holder already gave
+ME = next((r.person_id for r in PEOPLE.itertuples() if str(r.is_me).lower() in ("yes", "true", "1") and r.person_id in PERSON_IMAGES), None)   # the account holder's own face group
+
+CAT_ORDER = ["Travel", "Family", "Friends", "Bills & Receipts", "Study", "Work", "Shopping", "Food", "Events", "Nature", "Funny", "Everyday"]
+CAT_RULES = [  # simulated AI: first matching rule wins (whole words only, read from description and in-image text)
+    ("Funny", ["meme", "memes", "funny", "tweet", "tiktok", "instagram"]),
+    ("Nature", ["panther", "tiger", "tigers", "wildlife", "cubs"]),
+    ("Travel", ["flight", "boarding", "beach", "hiking", "mountains", "sunset", "sea", "trip", "seat", "gate", "hunza", "naran", "lake", "valley", "clifton"]),
     ("Events", ["fest", "poster", "event", "concert"]),
+    ("Family", ["family", "cousins", "wedding", "birthday", "parents", "father", "mother", "daughter", "children", "mehndi", "eid", "bride", "bridesmaids", "brother", "sister"]),
+    ("Friends", ["friends", "classmates", "party"]),
+    ("Work", ["office", "meeting", "colleagues", "business", "contact"]),
+    ("Study", ["assignment", "lecture", "hci", "cognitive", "lms", "submit", "deadline", "notes", "notebook", "handwritten", "students", "classroom", "seminar"]),
+    ("Shopping", ["sale", "listing", "laptop", "shoes", "order", "payment"]),
+    ("Food", ["biryani", "food", "cake", "karahi", "iftar", "dishes"]),
 ]
 HELD = {"img03", "img07", "img16"}  # "new images" the researcher can make arrive
 TYPE_WORDS = {"photo": "photo", "photos": "photo", "screenshot": "screenshot", "screenshots": "screenshot",
               "receipt": "receipt", "receipts": "receipt", "bill": "bill", "bills": "bill", "ticket": "ticket",
               "tickets": "ticket", "document": "document", "documents": "document"}
-SUGGESTIONS = ["When is my HCI assignment due?", "Show photos of Person 1", "How much is the electricity bill?",
+SUGGESTIONS = ["When is my HCI assignment due?", "Show all photos of Sara", "Fetch the photo where I am wearing pink", "Show me all event posters",
+               "How much is the electricity bill?",
                "Who is in the dinner photo?", "Create a collection called Eid with family dinner photos"]
 SYN = {"grocery": ["supermarket", "imtiaz"], "groceries": ["supermarket", "imtiaz"], "trip": ["travel", "beach", "flight"], "pic": ["photo"], "pics": ["photo"], "picture": ["photo"],
        "money": ["rs", "total"], "paid": ["receipt", "total"], "holiday": ["travel", "trip"],
@@ -62,6 +72,62 @@ STOP = {"the", "a", "an", "of", "my", "me", "i", "to", "for", "from", "with", "t
         "count", "number", "s", "anyone", "anybody", "someone", "somebody", "everyone", "r", "u", "ur", "pls", "plz", "wearing", "wear", "wears", "wore", "dressed", "having", "got", "show", "me", "photu", "pix", "snaps", "shots", "whats", "who's", "tell", "ask", "mine", "our", "us", "we", "them", "or"}
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
           "november", "december"]
+
+TYPE_WORDS.update({"poster": "poster", "posters": "poster", "flyer": "poster", "flyers": "poster", "docs": "document"})
+STOP |= {"fetch", "retrieve", "bring", "pull", "grab", "open", "display", "list", "one", "ones", "am", "m", "im", "her", "his", "their", "she", "he", "they",
+         "him", "had", "latest", "recent", "newest", "oldest", "earliest", "taken", "photograph", "photographs", "that", "which", "also", "just", "kindly"}
+SYN.update({
+    # events and posters
+    "poster": ["flyer", "invitation"], "flyer": ["poster"], "invite": ["invitation", "poster"], "invitation": ["poster", "invite"],
+    "event": ["poster", "fest", "festival", "party"], "events": ["poster", "fest", "festival", "party"], "festival": ["fest", "poster"],
+    "concert": ["music", "party"], "party": ["celebration"], "celebration": ["party"],
+    # family, people and occasions
+    "wedding": ["family", "shaadi", "bride", "barat"], "shaadi": ["wedding"], "shadi": ["wedding"], "barat": ["wedding", "bride"], "baraat": ["barat", "wedding"],
+    "bride": ["wedding", "bridal"], "mehndi": ["mehendi", "haldi"], "eid": ["chand", "festive"], "iftar": ["ramadan", "dinner"], "ramzan": ["ramadan"],
+    "ramadan": ["iftar"], "friends": ["classmates"], "classmates": ["friends"], "colleagues": ["office", "work"], "office": ["work", "meeting"],
+    "work": ["office", "meeting"], "meeting": ["office", "colleagues"], "siblings": ["brother", "sister", "kids"], "brother": ["siblings"],
+    "sister": ["siblings"], "dad": ["father"], "father": ["dad"], "mom": ["mother"], "mother": ["mom"], "baby": ["toddler", "child"], "toddler": ["child", "baby"],
+    "children": ["kids"], "girl": ["woman"], "woman": ["girl"], "guys": ["people"], "people": ["person"],
+    # clothes
+    "kurta": ["kameez", "shalwar"], "saree": ["sari"], "sari": ["saree"], "hijab": ["scarf", "dupatta"], "dupatta": ["shawl"], "lehenga": ["sharara", "bridal"],
+    "dress": ["gown", "outfit"], "gown": ["dress"], "outfit": ["dress"], "suit": ["blazer", "jacket"],
+    # places and nature
+    "mountain": ["mountains", "hunza", "naran", "valley"], "mountains": ["hunza", "naran", "valley", "lake"], "north": ["hunza", "naran"], "northern": ["hunza", "naran"],
+    "valley": ["hunza", "naran"], "snow": ["hunza", "lake"], "lake": ["jheel"], "jheel": ["lake"], "beach": ["clifton", "sea", "seaside"], "sea": ["clifton", "beach"],
+    "sunset": ["evening", "golden"], "animals": ["wildlife", "tiger", "panther"], "animal": ["wildlife"], "wildlife": ["animal"], "tiger": ["wildlife"],
+    "panther": ["wildlife"], "leopard": ["panther"],
+    # food
+    "food": ["dinner", "biryani", "karahi", "lunch"], "lunch": ["food"], "dessert": ["cake"], "cake": ["dessert", "chocolate"], "biryani": ["rice"], "curry": ["karahi", "nihari"],
+    # documents, money, travel
+    "card": ["visiting", "business"], "visiting": ["business"], "business": ["visiting", "card"], "cnic": ["id", "identity"], "id": ["cnic", "identity"],
+    "boarding": ["flight", "pass"], "plane": ["flight"], "flight": ["boarding", "plane"], "airport": ["flight"], "ticket": ["boarding", "flight"],
+    "payment": ["paid", "transaction"], "transaction": ["payment"], "jazzcash": ["payment"], "easypaisa": ["payment"], "bill": ["utility"],
+    "electricity": ["bijli", "k-electric", "kesc"], "internet": ["wifi", "broadband"], "wifi": ["internet"], "receipt": ["slip"],
+    "calculus": ["maths", "math"], "maths": ["calculus", "math"], "math": ["maths", "calculus"],
+    "chat": ["whatsapp", "messages"], "whatsapp": ["chat", "message"], "order": ["parcel", "delivery"], "delivery": ["parcel", "order"],
+    "meme": ["funny", "joke"], "funny": ["meme", "joke"], "joke": ["meme", "funny"],
+    "blurry": ["blur"], "blur": ["blurry"], "blurred": ["blurry"], "fuzzy": ["blurry"], "night": ["evening"],
+})
+ROMAN = {"gulabi": "pink", "kala": "black", "kaala": "black", "safed": "white", "neela": "blue", "nila": "blue", "lal": "red", "laal": "red", "hara": "green",
+         "peela": "yellow", "dawat": "dinner", "bijli": "electricity", "tasveer": "photo", "tasvir": "photo", "tasveeren": "photos", "tasaweer": "photos",
+         "meri": "my", "mera": "my", "kapray": "wearing", "kapre": "wearing", "kapra": "wearing", "libaas": "wearing", "dikhao": "show", "dikhaao": "show", "pehna": "wearing", "pehni": "wearing", "pehne": "wearing"}
+
+
+def normalize_query(q):
+    """Roman-Urdu words people mix into English searches (gulabi, tasveer, dawat...) become their English meaning."""
+    q = re.sub(r"\bmeri\s+(?:tasveer|tasvir|tasveeren|tasaweer)\b", "photos of me", q, flags=re.I)
+    return re.sub(r"[A-Za-z]+", lambda m: ROMAN.get(m.group(0).lower(), m.group(0)), q)
+
+
+def _vocab():
+    words = set()
+    for r in df.itertuples():
+        for field in (r.tags, r.description, r.visible_text, r.wearing):
+            words.update(re.findall(r"[a-z]{4,}", str(field).lower()))
+    return words
+
+
+VOCAB = _vocab()   # every word that appears in the photo data: used to forgive typos ("wonderlnd" -> "wonderland")
 
 
 def auto_category(r):
@@ -127,12 +193,18 @@ def search_terms(q):
             out.setdefault(t[:-1], t)
         for x in SYN.get(t, []):
             out.setdefault(x, t)
+        if len(t) >= 4 and t not in VOCAB and t not in COLORS and t not in SYN and t not in TYPE_WORDS and t not in MONTHS and not t.isdigit() \
+                and not (t.endswith("s") and t[:-1] in VOCAB):   # a typo: take the closest word the photos really use
+            near = difflib.get_close_matches(t, VOCAB, n=1, cutoff=0.8)
+            if near:
+                out.setdefault(near[0], t)
     return out  # term -> word the user typed (None if typed directly)
 
 
 COLORS = {"red", "green", "blue", "pink", "purple", "yellow", "orange", "white", "black", "brown", "grey", "gray", "beige",
           "gold", "maroon", "olive", "magenta", "cream", "violet"}
 WEAR_RE = re.compile(r"\b(wear|wearing|wears|wore|dressed|clothes|outfit)\b", re.I)
+COLORS |= {"peach", "navy", "teal", "silver", "turquoise", "lavender", "tan", "khaki", "golden", "mustard", "rose"}
 
 
 def search(ctx, q, rfilter="All", rows=None):
@@ -153,15 +225,18 @@ def search(ctx, q, rfilter="All", rows=None):
                 continue
         ev, score, hits = [], 0.0, 0
         meta = (r.type + " " + ctx.cat_of(r)).lower()
+        vt, dl = r.visible_text.lower(), r.description.lower()
         for term, origin in terms.items():
             w = 1.0 if origin is None else 0.5
-            if term in r.visible_text.lower():
+            short = len(term) <= 3
+            inside = (lambda hay: bool(re.search(rf"\b{re.escape(term)}\b", hay))) if short else (lambda hay: term in hay)
+            if inside(vt):
                 ev.append(("text", term, origin)); score += 4 * w
-            elif re.search(rf"\b{re.escape(term)}", tags):
+            elif re.search(rf"\b{re.escape(term)}" + (r"\b" if short else ""), tags):
                 ev.append(("tag", term, origin)); score += 3 * w
-            elif term in r.description.lower():
+            elif inside(dl):
                 ev.append(("desc", term, origin)); score += 2 * w
-            elif term in meta:
+            elif inside(meta):
                 ev.append(("meta", term, origin)); score += 1 * w
             else:
                 continue
@@ -170,7 +245,7 @@ def search(ctx, q, rfilter="All", rows=None):
             continue
         if score:
             out.append((hits, score, r, ev))
-    out.sort(key=lambda x: (-x[0], -x[1]))
+    out.sort(key=lambda x: (-x[0], -x[1], -((taken_date(x[2]) or date.min).toordinal())))   # best match first, newest first on a tie
     # when the user typed several words, keep only rows that matched the most typed words
     if len(typed) > 1 and out:
         top = out[0][0]
@@ -186,15 +261,72 @@ def ev_sentence(e):
 
 
 # --------------------------------------------------------------------------- helpers for answers
+ME_RE = re.compile(r"\b(?:i\s+am|i'm|im|i\s+was|i\s+wore|i\s+wear|i\s+look|where\s+i|in\s+which\s+i|(?:of|with|featuring|showing|including)\s+(?:me|myself)"
+                   r"|\band\s+me\b|(?<!show )(?<!get )(?<!give )(?<!find )(?<!fetch )(?<!bring )(?<!send )(?<!let )(?<!tell )me(?=\s+(?:wearing|in|with|at|on|and)\b)|myself|my\s+(?:selfies?|face|outfit|look))\b", re.I)
+
+
 def find_people(ctx, q):
-    """Person ids named in the question, and the question with those names removed."""
+    """Person ids named in the question, and the question with those names removed.
+    The name 'Me' is not matched here ('show me ...' is not about a person): first-person phrases are handled by ME_RE."""
     low, found = " " + q.lower() + " ", []
     for pid, name in sorted(ctx.names.items(), key=lambda kv: -len(kv[1])):
-        pat = re.compile(r"(?<!\w)" + re.escape(name.lower()) + r"(?!\w)")
+        n = name.strip().lower()
+        if n == "me":
+            continue
+        pat = re.compile(r"(?<!\w)" + re.escape(n) + r"(?!\w)")
         if pat.search(low):
             found.append(pid)
             low = pat.sub(" ", low)
+            continue
+        if " " not in n and len(n) >= 4:    # near-miss spelling: "Sarah" finds Sara
+            for tok in set(re.findall(r"[a-z]+", low)):
+                if tok != n and len(tok) >= 4 and tok not in STOP and tok not in VOCAB and tok not in MONTHS and tok not in TYPE_WORDS \
+                        and difflib.SequenceMatcher(None, tok, n).ratio() >= 0.84:
+                    found.append(pid)
+                    low = re.sub(r"(?<!\w)" + re.escape(tok) + r"(?!\w)", " ", low)
+                    break
     return found, low.strip()
+
+
+def who_label(ctx, pid):
+    """How a face group is named in a sentence: the account holder's own group reads as 'you'."""
+    lab = person_label(ctx, pid)
+    return "you" if (pid == ME and lab == "Me") else lab
+
+
+REL_RE = re.compile(r"\b(this|last|past)\s+(month|year|week)\b|\b(today|yesterday)\b", re.I)
+YEAR_RE = re.compile(r"\b(?:in|from|during|of|year)\s+((?:19|20)\d\d)\b", re.I)
+
+
+def time_filter(q, today=None):
+    """'from 2025', 'last month', 'this week', 'yesterday' -> (test(date) or None, label, question without the phrase)."""
+    today = today or date.today()
+    m = YEAR_RE.search(q)
+    if m:
+        y = int(m.group(1))
+        return (lambda d: d.year == y), f"in {y}", (q[:m.start()] + " " + q[m.end():]).strip()
+    m = REL_RE.search(q)
+    if not m:
+        return None, "", q
+    word = m.group(0).lower()
+    first = today.replace(day=1)
+    prev_last = first - timedelta(days=1)
+    mon = today - timedelta(days=today.weekday())
+    tests = {
+        "this month": (lambda d: (d.year, d.month) == (today.year, today.month), "this month"),
+        "last month": (lambda d: (d.year, d.month) == (prev_last.year, prev_last.month), "last month"),
+        "past month": (lambda d: today - timedelta(days=31) <= d <= today, "in the past month"),
+        "this year": (lambda d: d.year == today.year, "this year"),
+        "last year": (lambda d: d.year == today.year - 1, "last year"),
+        "past year": (lambda d: today - timedelta(days=366) <= d <= today, "in the past year"),
+        "this week": (lambda d: mon <= d <= today, "this week"),
+        "last week": (lambda d: mon - timedelta(days=7) <= d < mon, "last week"),
+        "past week": (lambda d: today - timedelta(days=7) <= d <= today, "in the past week"),
+        "today": (lambda d: d == today, "today"),
+        "yesterday": (lambda d: d == today - timedelta(days=1), "yesterday"),
+    }
+    fn, label = tests[re.sub(r"\s+", " ", word)]
+    return fn, label, (q[:m.start()] + " " + q[m.end():]).strip()
 
 
 MON3 = "|".join(m[:3] for m in MONTHS)
@@ -263,7 +395,7 @@ def answer(ctx, q):  # noqa: C901 - one readable decision list on purpose
                          chips=["Show my latest photos"], query=q)
         name = next((c for c in ctx.collections if c.lower() == (coll or "").lower()), None) or (coll.strip().title() if coll else "Edited")
         what = ", ".join(editor.describe(ops))
-        return Reply("command", f"I will {what}.", ids=ids, query=q, chips=["Open in editor"],
+        return Reply("command", f"Editing {len(ids)} photo{'s' if len(ids) != 1 else ''}: {what}.", ids=ids, query=q, chips=["Open in editor"],
                      cmd={"type": "edit_photos", "ids": ids, "ops": ops, "collection": name},
                      steps=[f"Understood: edit {len(ids)} photo{'s' if len(ids) != 1 else ''} ({what}).",
                             f"The result is saved as a new copy in “{name}”. Your original is never changed.",
@@ -302,19 +434,31 @@ def answer(ctx, q):  # noqa: C901 - one readable decision list on purpose
 
 
 def answer_find(ctx, q, allow_count=True):  # noqa: C901
+    q = normalize_query(q)
     low = q.lower().strip(" ?!.")
     rows = ctx.rows
 
     # ---- people ---------------------------------------------------------------------------------
+    me_asked = bool(ME and ME_RE.search(q))      # "photos of me", "the one where I am wearing pink"
+    if me_asked:
+        if not ctx.faces_on:
+            return Reply("info", "To find photos of **you**, turn on People first so I know which face is yours.", chips=["Open People"], query=q)
+        if ME not in ctx.names:
+            return Reply("info", "Your own face group is hidden. Show it again in Settings, then ask me again.", chips=["Open People"], query=q)
+        q = ME_RE.sub(" ", q)
+        low = q.lower().strip(" ?!.")
     pids, rest = find_people(ctx, q) if ctx.faces_on else ([], q)
+    if me_asked:
+        pids = [ME] + [p for p in pids if p != ME]
     unknown_person = None
     if not pids:
         mm = re.search(r"(?:photos?|pictures?|pics?|images?)\s+(?:of|with)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)", q)
-        if mm and mm.group(1).lower() not in MONTHS and mm.group(1).lower() not in TYPE_WORDS:
+        if mm and mm.group(1).lower() not in MONTHS and mm.group(1).lower() not in TYPE_WORDS and mm.group(1).lower() not in ("me", "mine"):
             unknown_person = mm.group(1)
 
     # ---- filters: month, favourites, type -------------------------------------------------------
     mon, yr, rest = month_filter(rest)
+    tf, tlabel, rest = time_filter(rest) if not mon else (None, "", rest)
     favs = bool(re.search(r"\b(favou?rites?|starred|hearted|liked)\b", rest, re.I))
     if favs:
         rest = re.sub(r"\b(favou?rites?|starred|hearted|liked)\b", " ", rest, flags=re.I)
@@ -324,6 +468,8 @@ def answer_find(ctx, q, allow_count=True):  # noqa: C901
         pool = [r for r in pool if r.id in keep]
     if mon:
         pool = [r for r in pool if (d := taken_date(r)) and d.month == mon and (not yr or d.year == yr)]
+    if tf:
+        pool = [r for r in pool if (d := taken_date(r)) and tf(d)]
     if favs:
         pool = [r for r in pool if r.id in ctx.fav]
 
@@ -332,16 +478,18 @@ def answer_find(ctx, q, allow_count=True):  # noqa: C901
     is_who = bool(re.search(r"\bwho\b|\bwhos\b|\bwho's\b|\bwhich people\b", low))
     is_time = bool(re.search(r"\bwhat time\b|\bat what time\b", low))
     is_when = bool(re.search(r"^when\b|\bwhen is\b|\bwhat (day|date)\b|\bdue date\b|\bdeadline\b.*\?|\bwhen are\b", low))
-    is_money = bool(re.search(r"\bhow much\b|\bprice\b|\bcost\b|\btotal\b|\bamount\b|\bbalance\b|\bbill\b.*\b(due|is)\b", low))
+    is_money = bool(re.search(r"\bhow much\b|\bprice\b|\bcost\b|\btotal\b|\bamount\b|\bbalance\b|\bbill\b.*\b(due|is)\b|\b(pay|owe|payable)\b", low))
 
     content = [t for t, o in search_terms(rest).items() if o is None]
     typed_only = [t for t in content if t not in TYPE_WORDS]
-    type_filter = next((TYPE_WORDS[t] for t in re.findall(r"\w+", rest.lower()) if t in TYPE_WORDS), None)
+    tw = [TYPE_WORDS[t] for t in re.findall(r"\w+", rest.lower()) if t in TYPE_WORDS]
+    type_filter = next((t for t in tw if t != "photo"), tw[0] if tw else None)   # "photo of the poster" is about posters, not photos
+    order = "new" if re.search(r"\b(latest|recent|newest|last added|just taken)\b", low) else "old" if re.search(r"\b(oldest|earliest)\b", low) else None
 
     # a person with no other words: show all their photos
     if pids and not typed_only and not is_who:
         ids = [r.id for r in pool]
-        nm = " and ".join(person_label(ctx, p) for p in pids)
+        nm = " and ".join(who_label(ctx, p) for p in pids)
         if is_count:
             return Reply("count", f"You have **{len(ids)}** photo{'s' if len(ids) != 1 else ''} with {nm}.",
                          ids=ids[:6], person=pids[0], query=q,
@@ -383,8 +531,13 @@ def answer_find(ctx, q, allow_count=True):  # noqa: C901
     hits = search(ctx, rest, rfilter="All", rows=pool) if content else []
     if type_filter and not typed_only:
         hits = [(1, r, [("meta", type_filter, None)]) for r in pool if r.type == type_filter]
-    elif not content and (mon or favs):
+    elif type_filter and type_filter != "photo":
+        hits = [h for h in hits if h[1].type == type_filter]       # "event posters", "electricity bills": the kind is a hard requirement
+    elif not content and (mon or favs or tf or order):
         hits = [(1, r, [("meta", "taken", None)]) for r in pool]
+    if order:                                                       # "latest photos", "oldest bills"
+        base = hits or ([(1, r, [("meta", "taken", None)]) for r in pool] if not content else [])
+        hits = sorted(base, key=lambda h: taken_date(h[1]) or date.min, reverse=(order == "new"))[:12]
     if favs and not ctx.fav:
         return Reply("none", "You haven’t marked any favourites yet. Tap the heart on a photo to add one.", query=q)
 
@@ -399,10 +552,15 @@ def answer_find(ctx, q, allow_count=True):  # noqa: C901
     if hits and (is_when or is_money or is_time):
         kind = "date" if (is_when and not is_money) else ("time" if is_time else "money")
         pat = {"date": DATE_RE, "time": TIME_RE, "money": MONEY_RE}[kind]
-        withval = [(h, pat.search(h[1].visible_text)) for h in hits[:4] if pat.search(h[1].visible_text)]
+        withval = [(h, pat.search(h[1].visible_text)) for h in hits[:12] if pat.search(h[1].visible_text)]
         if withval:
             top_score = withval[0][0][0]
             best = [w for w in withval if w[0][0] >= top_score - 0.01]
+            best.sort(key=lambda w: taken_date(w[0][1]) or date.min, reverse=True)
+            if not (mon or tf) and len(best) > 1:      # no month asked for: the current bill, not last year's
+                newest = taken_date(best[0][0][1])
+                if newest:
+                    best = [w for w in best if (d := taken_date(w[0][1])) and (newest - d).days <= 90]
             word = {"date": "date", "time": "time", "money": "amount"}[kind]
             if len(best) == 1:
                 (_, r, _), mt = best[0]
@@ -424,6 +582,10 @@ def answer_find(ctx, q, allow_count=True):  # noqa: C901
 
     # plain search
     ids = [h[1].id for h in hits]
+    if not ids and pids:
+        who = " and ".join(who_label(ctx, p) for p in pids)
+        return Reply("none", f"I couldn’t find photos with **{who}** matching “{' '.join(typed_only) or rest.strip()}”.", query=q, person=pids[0],
+                     steps=make_steps(ctx, rest, hits, [f"Looked only inside the face group for {who}; nothing there matched."]))
     if not ids:
         extra = " Try fewer words, or a person, month or type like “receipts”." if allow_count else ""
         return Reply("none", f"I couldn’t find anything for “{q}”.{extra}", query=q, chips=["Show my latest photos"],
@@ -442,12 +604,18 @@ def answer_find(ctx, q, allow_count=True):  # noqa: C901
            "what is visible in the photos" if any(k == "tag" for _, _, ev in hits[:3] for k, _, _ in ev) else "descriptions and types")
     bits = [f"Matched on {why}."]
     if pids:
-        bits.insert(0, f"Used the face group for {', '.join(person_label(ctx, p) for p in pids)}.")
+        bits.insert(0, f"Used the face group for {', '.join(who_label(ctx, p) for p in pids)}.")
     if mon:
         bits.append(f"Kept photos taken in {MONTHS[mon - 1].title()}.")
+    if tf:
+        bits.append(f"Kept photos taken {tlabel}.")
+    if type_filter and type_filter != "photo":
+        bits.append(f"Only looked at {type_filter}s.")
     what = f" for “{' '.join(typed_only)}”" if typed_only else ""
-    when = f" taken in {MONTHS[mon - 1].title()}" if mon else ""
-    kind_word = (type_filter + "s") if (type_filter and not typed_only) else "photos"
+    when = f" taken in {MONTHS[mon - 1].title()}" if mon else (f" taken {tlabel}" if tf else "")
+    kind_word = ((type_filter or "photo") + "s") if (type_filter and (not typed_only or type_filter != "photo")) else "photos"
+    if pids and ME in pids and len(pids) == 1:
+        what = (what + " (photos of you)") if what else " of you"
     n = len(ids)
     part = (f" Nothing matched {', '.join('“' + t + '”' for t in missing)}, so these are partial matches." if missing else "")
     return Reply("results", f"I found **{n}** {kind_word if n != 1 else kind_word.rstrip('s')}{what}{when}"
@@ -461,7 +629,7 @@ from collections import Counter  # noqa: E402
 from functools import lru_cache  # noqa: E402
 
 import numpy as np  # noqa: E402
-from PIL import Image, ImageOps  # noqa: E402
+from PIL import Image, ImageFilter, ImageOps  # noqa: E402
 
 
 @lru_cache(maxsize=None)
@@ -471,10 +639,22 @@ def quality(file):
     w, h = im.size
     g = np.asarray(ImageOps.fit(im, (256, 192)), dtype=float)
     lap = g[1:-1, 1:-1] * 4 - g[:-2, 1:-1] - g[2:, 1:-1] - g[1:-1, :-2] - g[1:-1, 2:]
-    return {"mp": w * h / 1e6, "sharp": float(lap.var())}
+    # blur test on the whole picture (long side 320): (1) how much edge detail is lost when a mild blur is added (a picture that is
+    # already blurry loses little), (2) how many 8x8 blocks contain a sharp step at all (a blurry picture has almost none)
+    s = 320 / max(w, h)
+    g2 = np.asarray(im.resize((max(16, int(w * s)), max(16, int(h * s))), Image.LANCZOS), dtype=float)
+    gy, gx = np.gradient(g2)
+    mag = np.hypot(gx, gy)
+    bh, bw = (mag.shape[0] // 8) * 8, (mag.shape[1] // 8) * 8
+    frac = float((mag[:bh, :bw].reshape(bh // 8, 8, bw // 8, 8).max(axis=(1, 3)) > 28).mean())
+    gy2, gx2 = np.gradient(np.asarray(Image.fromarray(g2.astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.6)), dtype=float))
+    loss = float(1 - np.hypot(gx2, gy2).sum() / max(1e-9, mag.sum()))
+    return {"mp": w * h / 1e6, "sharp": float(lap.var()), "loss": loss, "frac": frac}
 
 
-BLUR_BELOW = 60      # sharpness score under this looks blurry
+BLUR_BELOW = 60      # (old measure, kept for reference)
+BLUR_LOSS = 0.36     # edge detail kept under a mild blur: below this the photo was already blurry
+BLUR_FRAC = 0.17     # share of the picture that has any sharp edge: below this it is out of focus
 LOWRES_BELOW = 0.05  # megapixels
 CLEAN_META = {
     "blurry": ("Blurry photos", "Out of focus or too soft to read. The sharpness score is far below your other photos."),
@@ -486,7 +666,7 @@ CLEAN_META = {
 
 OPENED: set = set()          # photos opened in this session (kept in step by the app, like edited copies)
 UNOPENED_DAYS = 365
-PEOPLE_WORDS = re.compile(r"family|friends?|cousins?|people|couple|selfie|father|mother|daughter|son|guests?|wedding|portrait|crowd|group", re.I)
+PEOPLE_WORDS = re.compile(r"family|friends?|cousins?|people|couple|selfie|father|mother|daughter|son|guests?|wedding|portrait|crowd|group|bride|bridesmaids|classmates|colleagues|siblings|toddler|woman|girls?", re.I)
 
 
 def sync_opened(s):
@@ -513,7 +693,8 @@ def _hash(file):
 def duplicate_ids(rows, max_dist=56):
     """Photos that are near-copies of a sharper photo taken within a day. Only real photos are compared
     (flat screenshots and bills look alike to a hash). The sharpest in each set is never listed."""
-    ph = sorted([r for r in rows if r.type == "photo"], key=lambda r: -quality(r.file)["sharp"])
+    ph = sorted([r for r in rows if r.type == "photo" and not str(r.id).startswith("ed")],   # edited copies are not clutter
+ key=lambda r: -quality(r.file)["sharp"])
     keep, flagged = [], set()
     for r in ph:
         h = _hash(r.file)
@@ -544,7 +725,7 @@ def cleanup_groups(rows, kept=()):
         q = quality(r.file)
         lo = getattr(r, "last_opened", "")
         stale = bool(lo) and (today - pd.to_datetime(lo).date()).days > UNOPENED_DAYS and r.id not in OPENED
-        if q["sharp"] < BLUR_BELOW:
+        if r.type == "photo" and (q["loss"] < BLUR_LOSS or q["frac"] < BLUR_FRAC):   # flat screenshots, bills and tickets are not "blurry photos"
             out["blurry"].append(r)
         elif q["mp"] < LOWRES_BELOW:
             out["lowres"].append(r)
@@ -562,7 +743,7 @@ def moments(rows, cat_of):
     by = {}
     for r in rows:
         d = taken_date(r)
-        if d and r.type == "photo":
+        if d and r.type == "photo" and not str(r.id).startswith("ed"):
             by.setdefault(d, []).append(r)
     out = []
     for d, items in sorted(by.items(), reverse=True):
@@ -612,7 +793,8 @@ def register_copy(rec):
     im = editor.apply(Image.open(ROOT / src.file), rec["ops"])
     im.save(out, "JPEG", quality=92)
     row = {"id": rec["id"], "file": f"edited/{rec['id']}.jpg", "type": src.type, "description": f"{src.description} (edited)",
-           "visible_text": src.visible_text, "album": src.album, "suggested_label": "", "taken": datetime.now().strftime("%Y-%m-%d"),
+           "visible_text": src.visible_text, "album": src.album, "suggested_label": "", "taken": src.taken,   # the copy keeps the original photo's date
+
            "last_opened": "", "tags": getattr(src, "tags", ""), "wearing": getattr(src, "wearing", "")}
     row = [row.get(c, "") for c in df.columns]
     df.loc[(df.index.max() + 1) if len(df) else 0] = row   # new label, never reuses one left by a dropped copy
@@ -672,7 +854,7 @@ def deadlines(rows, today):
     """
     out = []
     for r in rows:
-        if r.type not in ("bill", "screenshot", "document"):
+        if r.type not in ("bill", "screenshot", "document", "poster"):
             continue
         t = r.visible_text
         m = re.search(r"(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)", t)

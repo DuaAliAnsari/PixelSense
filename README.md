@@ -35,7 +35,13 @@ Keep `.streamlit/config.toml` next to `app.py` (it locks the light theme).
 | `What needs my attention?` | Opens Needs attention |
 | `When is my HCI assignment due?` | Reads the date from the text inside the screenshot and shows the photo |
 | `How much is the electricity bill?` / `How much are my bills` | Reads amounts from bills |
-| `Show photos of Person 1` | Needs face groups on (People). Shows every photo of that person |
+| `Fetch me all photos of Sara` | Needs face groups on (People). Every photo of that person. Typos are forgiven (`Sarah`) |
+| `Fetch me that photo in which I am wearing pink` | "I", "me" and "my" mean the account holder (the face People calls **Me**). Combines Me with clothing colour |
+| `Fetch me all event posters` | Type words (posters, receipts, bills, tickets, documents) are hard filters |
+| `Get me the photo of the poster of the Tech Fest event` | Poster type plus the event name read from the poster |
+| `Show photos where I am wearing pink at a wedding` | Me + colour + scene |
+| `Photos from last month`, `bills from 2024`, `latest photos` | Date words: last/this month, week or year, a year, newest or oldest first |
+| `gulabi kapray`, `meri tasveer gulabi pehni` | A few Roman-Urdu words are understood (colours, tasveer, dawat, bijli...) |
 | `Who is in the dinner photo?` | Lists the people found in that photo |
 | `how many receipts do I have` | Counts matches |
 | `photos from September`, `show favorites` | Month and favourites filters |
@@ -60,7 +66,8 @@ Face groups are opt-in and can be turned off and forgotten. You name people. Eve
 ## What is real and what is simulated
 - **Real:** search, question answering (extracts dates, amounts and times from prepared text), deadline detection and urgency, pasted-text date reading, near-duplicate detection, commands, collections, naming/hiding people, clean-up measurements, photo editing, undo.
 - **Simulated:** collection sorting (simple rules), in-image text and face boxes (prepared in `manifest.csv` / `faces.csv`), face grouping (assigned by the researcher; nothing is recognised live), the "last opened" dates in `manifest.csv`, whether a photo has people in it (face boxes plus the prepared description), analysis progress, new-photo arrival. A real version would use on-device text recognition and face grouping. Nothing leaves the machine.
-- `make_faces.py` shows how the face data and the extra "shots" of the same people were prepared.
+- `make_faces.py` shows how the face data and the extra "shots" of the same people were prepared. **Do not run `make_faces.py` or `make_samples.py` again**: they rewrite `faces.csv` and `manifest.csv` from the original 33 images and would erase the newer photos and faces.
+- To add a photo: put the file in `images/`, add a row to `manifest.csv` (`tags` = what is visible, 10 to 15 words; `wearing` = clothes and colours; `visible_text` = words printed in the image), and add its face boxes to `faces.csv`. Use the same `person_id` for the same person in every photo.
 
 ## Researcher tools (Settings, bottom)
 Simulate 3 new photos arriving, and Reset prototype between participants.
@@ -75,6 +82,7 @@ Simulate 3 new photos arriving, and Reset prototype between participants.
 | `styles.py` | All CSS, including the Liquid Glass design system |
 | `manifest.csv` | Photo metadata: `description`, in-image text, `tags` (what is visible), `wearing` (clothing and colours), `taken` dates. Every new photo needs a row with tags, or it cannot be found |
 | `faces.csv` | Face boxes and person groups |
+| `people.csv` | Names given from the start, and which person is the account holder (`is_me`). Today: `me` = "Me" (the girl in `pink sari.jpg`) and `sara` = "Sara". The account picture on Home is Me's face |
 | `images/` | Sample photos |
 | `make_faces.py`, `make_samples.py` | Data preparation |
 | `PROBLEM_AND_DESIGN.md` | The problem, loopholes, information architecture and design system |

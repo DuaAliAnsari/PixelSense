@@ -36,15 +36,18 @@ ROOT = Path(__file__).parent
 st.set_page_config(page_title="PixelSense", page_icon="✦", layout="wide", initial_sidebar_state="collapsed")
 st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)
 
-TYPE_FILTERS = ["All", "Photo", "Screenshot", "Receipt", "Bill", "Ticket", "Document"]
+TYPE_FILTERS = ["All", "Photo", "Screenshot", "Receipt", "Bill", "Ticket", "Poster", "Document"]
 TILE_COLORS = [("#EEEBFF", "#5B4FD6"), ("#FFE9EC", "#D6455D"), ("#E3F6EC", "#18936A"),
                ("#FFF1D6", "#C27A00"), ("#E1F1FF", "#2A7DD1"), ("#F3E8FF", "#9333EA")]
 HOME_CHIPS = {
     "What needs my attention?": "What needs my attention?",
     "HCI deadline": "When is my HCI assignment due?",
     "Electricity bill": "How much is the electricity bill?",
+    "Me in pink": "Fetch me that photo in which I am wearing pink",
+    "Photos of Sara": "Fetch me all photos of Sara",
+    "Event posters": "Fetch me all event posters",
+    "Tech Fest poster": "Get me the photo of the poster of the Tech Fest event",
     "Who’s at dinner?": "Who is in the dinner photo?",
-    "Photos of Person 1": "Show photos of Person 1",
     "Make a collection": "Create a collection called Eid with family dinner photos",
     "Edit by chat": "Make the wedding photos black and white and save to Eid",
     "My receipts": "Show my receipts",
@@ -109,7 +112,7 @@ def fresh_state():
     return dict(
         view="welcome", back="chat", query="", rfilter="All", hfilter="All", sel=None, cur_coll=None, cur_person=None,
         override={}, extra_cats=[], deleted_cats=set(), excluded_cats={"Sensitive"}, excluded_imgs=set(), removed=set(), arrived=set(),
-        names={}, hidden_people=set(), notp=set(), faces_on=None, fav=set(), kept=set(), cur_mem=None, copies=[], copy_seq=0, llm_on=False,
+        names=dict(E.PRESET_NAMES), hidden_people=set(), notp=set(), faces_on=None, fav=set(), kept=set(), cur_mem=None, copies=[], copy_seq=0, llm_on=False,
         history=[], searches=[], done=set(), study=None, opened=set(), manual=[], manual_seq=0, analytics_on=False, events=[], snack=None, scroll=False, menu=False, plus=False, chat=[], res=None,
     )
 
@@ -464,7 +467,17 @@ def topbar(title, back_view, key, home=False):
 
 
 USER_NAME = "Ayesha Khan"   # dummy account name shown in the Home greeting; change to any name
-USER_PIC = "images/selfie_closeup.jpg"   # dummy account picture; point to any file in images/
+USER_PIC = "images/selfie_closeup.jpg"   # fallback account picture (used only if people.csv has no "me")
+
+
+def me_pic_uri():
+    """The account picture is the face of the person marked is_me in people.csv (the same face People calls "Me")."""
+    ids = E.PERSON_IMAGES.get(E.ME, []) if E.ME else []
+    if not ids:
+        return img_uri(USER_PIC, 96, 96)
+    best = max(ids, key=lambda i: E.FACE_OF[(i, E.ME)][2] * E.FACE_OF[(i, E.ME)][3])
+    x, y, w, h = E.FACE_OF[(best, E.ME)]
+    return face_uri(R[best].file, x, y, w, h, size=96)
 
 
 def greeting():
@@ -484,7 +497,7 @@ def appbar(title="PixelSense", chat_btn=False, greet=False):
                 md(f'<div class="ab-title">{esc(title)}</div>')
         with c3:
             if greet:
-                md(f'<img class="me" src="{img_uri(USER_PIC, 96, 96)}" alt="{esc(USER_NAME)} account picture">')
+                md(f'<img class="me" src="{me_pic_uri()}" alt="{esc(USER_NAME)} account picture">')
             if chat_btn:
                 home_button("chat")
 
@@ -773,6 +786,8 @@ def rename_dialog(pid):
             notify(f"Named “{n}”.")
         else:
             S.names.pop(pid, None)
+            if pid in E.PRESET_NAMES:      # the account holder's own group is always called "Me" unless renamed
+                S.names[pid] = E.PRESET_NAMES[pid]
             notify("Name removed.")
         st.rerun()
 
@@ -871,8 +886,10 @@ def view_chat():
     appbar("Search results", chat_btn=True)
     snack_ui()
     last = len(S.chat) - 1
-    for idx, m in enumerate(S.chat):
-        render_msg(idx, m, idx == last)
+    # show only the current question and its answer; earlier ones stay in memory (for "make it brighter") but are not shown
+    start = max((i for i, m in enumerate(S.chat) if m["role"] == "user"), default=0)
+    for idx in range(start, len(S.chat)):
+        render_msg(idx, S.chat[idx], idx == last)
 
 
 def coming_up_ui():
@@ -1046,7 +1063,7 @@ def view_home():
 
     if S.faces_on is None:
         tappable("faces_cta", f'<div class="banner pressable"><div class="bic">{svg("users", 26, "#C27A00")}</div><div style="flex:1"><b>Group photos by person?</b>'
-                              f'<small>Turn on face groups to ask “photos of Person 1”.</small></div>{svg("chev", 22, "#C27A00")}</div>',
+                              f'<small>Turn on face groups to ask “photos of Sara” or “me in pink”.</small></div>{svg("chev", 22, "#C27A00")}</div>',
                  go, "people", label="Open People")
 
     attention_ui()
@@ -2058,7 +2075,7 @@ def view_settings():
 
     md('<div class="sect" style="margin-top:6px"><b>Face groups</b></div>')
     on = bool(S.faces_on)
-    nm = len(S.names) + len(S.hidden_people)
+    nm = len([p for p, n in S.names.items() if n != E.PRESET_NAMES.get(p)]) + len(S.hidden_people)   # names you added or changed
     with st.container(key="row_faces"):
         c1, c2 = st.columns([3, 2])
         with c1:
@@ -2080,7 +2097,7 @@ def view_settings():
         with st.container(key="sm_forget"):
             if st.button("Forget names and hidden people", key="faces_forget"):
                 snap()
-                S.names, S.hidden_people, S.notp = {}, set(), set()
+                S.names, S.hidden_people, S.notp = dict(E.PRESET_NAMES), set(), set()
                 notify("Names, hidden people and corrections were cleared.")
                 st.rerun()
     for pid in sorted(S.hidden_people, key=lambda p: E.PNUM[p]):
