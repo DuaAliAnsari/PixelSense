@@ -28,6 +28,7 @@ from PIL import Image, ImageOps
 import analytics as AN
 import editor as ED
 import study as ST
+import uuid
 import engine as E
 from engine import AUTO, CAT_ORDER, HELD, R, df
 from styles import CSS
@@ -120,6 +121,8 @@ def fresh_state():
 if "boot" not in S:
     S.update(fresh_state())
     S.boot = True
+    if st.query_params.get("study"):      # participants open the app with ?study=1 and land straight in the study
+        S.view = "study"
 E.sync_copies(S.copies)
 E.sync_opened(S.opened)   # keep the library tables in step with this session (edited copies, undo, reset)
 
@@ -263,6 +266,7 @@ def go(view):
 
 def open_image(i):
     S.opened.add(i)
+    study_seen(i)
     S.back = S.view if S.view != "detail" else S.back
     S.sel = i
     go("detail")
@@ -319,6 +323,7 @@ def undo():
 
 
 def remember_search(q):
+    study_tick("searches")
     S.searches = [q] + [x for x in S.searches if x.lower() != q.lower()]
     S.searches = S.searches[:8]
 
@@ -1061,6 +1066,11 @@ def view_home():
                 tappable(f"st_{k}", f'<div class="stat pressable"><span class="sic">{svg(ic, 22)}</span><div><div class="sn">{n}</div><div class="sl">{lab}</div></div></div>',
                          go, target, label=f"Open {lab}")
 
+    if not S.study:
+        tappable("study_cta", f'<div class="banner pressable"><div class="bic">{svg("sparkle", 26, "#C27A00")}</div><div style="flex:1"><b>Study mode</b>'
+                              f'<small>Take part in the usability study: short tasks, then a few questions.</small></div>{svg("chev", 22, "#C27A00")}</div>',
+                 go, "study", label="Open study mode")
+
     if S.faces_on is None:
         tappable("faces_cta", f'<div class="banner pressable"><div class="bic">{svg("users", 26, "#C27A00")}</div><div style="flex:1"><b>Group photos by person?</b>'
                               f'<small>Turn on face groups to ask “photos of Sara” or “me in pink”.</small></div>{svg("chev", 22, "#C27A00")}</div>',
@@ -1341,38 +1351,112 @@ def view_about():
        '<p><b>What it does not cover.</b> A deadline that never became a photo is only caught if you add it (type it, or paste the message). “Done” is your word. In this prototype the AI is simulated with prepared data.</p></div>')
 
 
-# ---- study mode (evaluation kit, researcher-facing) ----------------------------------------------------
+# ---- study mode (self-guided: the participant runs the whole session alone, on a phone or computer) ------
 def study_tasks():
-    return [t for t in ST.TASKS if S.study["cond"] in t[5]]
+    return ST.tasks_for(S.study["cond"], S.study["sets"][S.study["cond"]])
 
 
-@st.dialog("Task finished")
-def finish_dialog():
+def study_seen(i):
+    """Record that a photo was opened while a task is running (the app uses this to detect the right photo being found)."""
+    if S.study and S.study.get("running"):
+        S.study.setdefault("seen", set()).add(i)
+
+
+def task_progress(t):
+    """Returns (success, wrong_actions, hint). The app decides; the participant never says 'done'."""
+    sd, k, tg = S.study, t["kind"], t["targets"]
+    if k == "open":
+        seen = sd.get("seen", set())
+        return bool(seen & tg), len(seen - tg), ""
+    if k == "fav":
+        new = S.fav - sd["fav0"]
+        return tg <= new, len(new - tg), ""
+    if k == "clean":
+        new = S.removed - sd["rem0"]
+        good = len(new & tg)
+        hint = "Some of the photos you removed do not match the task." if len(new) >= ST.CLEAN_MIN and good < ST.CLEAN_MIN_CORRECT else ""
+        return len(new) >= ST.CLEAN_MIN and good >= ST.CLEAN_MIN_CORRECT, len(new - tg), hint
+    if k == "bw":
+        return any(c["src"] in ST.BEACH_IDS and "B&W" in str(c.get("ops")) for c in S.copies[sd["copies0"]:]), 0, ""
+    if k == "restore":                     # a target photo was removed at some point and is now back
+        gone = sd.setdefault("rm_seen", set())
+        gone |= S.removed & tg
+        return bool(gone - S.removed), 0, ""
+    if k == "crop":                        # a saved copy of the target with a crop or aspect change
+        for c in S.copies[sd["copies0"]:]:
+            o = c.get("ops") or {}
+            if c["src"] in tg and (tuple(o.get("crop", (0, 0, 0, 0))) != (0, 0, 0, 0) or o.get("aspect", "Original") != "Original"):
+                return True, 0, ""
+        return False, 0, ""
+    if k == "album":
+        new = [n for n in S.extra_cats if n not in sd["cats0"]]
+        return any(n.strip().lower() == "trip" and sum(v == n for v in S.override.values()) >= 2 for n in new), 0, ""
+    if k == "face":
+        return S.view == "person" and S.cur_person in tg, 0, ""
+    if k == "paid":
+        return bool((S.done - sd["done0"]) & tg), 0, ""
+    if k == "deadline":
+        return len(S.manual) > sd["man0"], 0, ""
+    if k == "control":
+        return len(S.excluded_imgs - sd["ex0"]) >= 1, 0, ""
+    return False, 0, ""
+
+
+def finish_task(outcome):
     sd = S.study
     t = study_tasks()[sd["i"]]
-    md(f'<div class="info"><p><b>{esc(t[0])} · {esc(t[2])}</b></p><p>Success looks like: {esc(t[4])}</p></div>')
-    success = st.radio("Did the participant succeed?", ["Yes", "Partly", "No or gave up"], key="fd_success", horizontal=True)
-    errors = st.number_input("Errors you observed (wrong taps, wrong results used, going back)", min_value=0, step=1, key="fd_errors")
-    notes = st.text_area("Quotes or observations (think-aloud)", key="fd_notes", height=90)
-    if st.button("Save and continue", type="primary", key="fd_save"):
-        ST.log_task(participant=sd["pid"], condition=sd["cond"], task_id=t[0], rq=t[1], seconds=round(time.time() - sd["t0"], 1), success=success,
-                    errors=int(errors), undos=sd.get("undos", 0), screens_visited=sd.get("nav", 0), notes=notes.replace("\n", " "))
-        sd["logs"].append({"task": t[0], "seconds": round(time.time() - sd["t0"], 1), "success": success})
-        sd["i"] += 1
-        sd["running"] = False
-        S.view = "study"
-        st.rerun()
+    _, wrong, _ = task_progress(t)
+    sd["pending"] = dict(task=t["id"], task_set=t["task_set"], rq=t["rq"], seconds=round(time.time() - sd["t0"], 1), outcome=outcome, success=int(outcome == "success"),
+                         wrong=wrong, opened=len(sd.get("seen", set())), searches=sd.get("searches", 0), undos=sd.get("undos", 0), nav=sd.get("nav", 0))
+    sd.update(running=False, step="seq")
+    S.view = "study"
+    st.rerun()
+
+
+@st.dialog("Give up this task?")
+def giveup_dialog():
+    st.write("That is fine. We will note that this task was too hard and move on.")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Yes, give up", type="primary", key="gu_yes"):
+            finish_task("gave_up")
+    with c2:
+        if st.button("Keep trying", key="gu_no"):
+            st.rerun()
 
 
 def study_bar():
+    """The task stays pinned at the top (dark bar, task text, Give up) so the participant can always see what they are doing. The app ends the task itself."""
     sd = S.study
-    n = len(study_tasks())
-    t = study_tasks()[sd["i"]]
-    md("<style>[data-testid='stMainBlockContainer']{padding-top:92px!important}</style>")
+    study_gate()
+    tasks = study_tasks()
+    t = tasks[sd["i"]]
+    ok, _, hint = task_progress(t)
+    if ok:
+        finish_task("success")
+    if hint and sd.get("hint_for") != hint + str(len(S.removed)):
+        sd["hint_for"] = hint + str(len(S.removed))
+        st.toast(hint)
+    md("<style>header[data-testid='stHeader']{display:none!important}"
+       "[data-testid='stMainBlockContainer']{padding-top:150px!important}"
+       "div.st-key-studybar{position:fixed!important;top:0!important;left:0!important;right:0!important;transform:none!important;width:100%!important;max-width:none!important;"
+       "border-radius:0!important;background:#1F1D2B!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;border:0!important;"
+       "padding:12px 16px 14px!important;z-index:1000;display:block!important}"
+       "div.st-key-studybar>div{width:100%!important;flex:none!important}"
+       "div.st-key-studybar [data-testid='stHorizontalBlock']{flex-wrap:nowrap!important;align-items:center!important;gap:12px!important}"
+       "div.st-key-studybar [data-testid='stColumn']{min-width:0!important}"
+       "div.st-key-studybar .sbx span{display:block;color:#C9CAE0;font-size:13px;margin-bottom:2px}"
+       "div.st-key-studybar .sbx b{display:block;color:#fff;font-size:16px;line-height:1.3;font-weight:600}"
+       "div.st-key-studybar .stButton{width:auto!important}"
+       "div.st-key-studybar .stButton>button{background:#fff!important;color:#1F1D2B!important;border:0!important;border-radius:999px!important;min-height:42px;"
+       "width:auto!important;padding:0 20px!important;font-weight:600!important;white-space:nowrap}</style>")
     with st.container(key="studybar"):
-        md(f'<div class="sb-t"><span>Task {sd["i"] + 1} of {n}</span><b>{esc(t[3])}</b></div>')
-        if st.button("I’m finished", key="sb_done", type="primary"):
-            finish_dialog()
+        c1, c2 = st.columns([4, 1.5], vertical_alignment="center")
+        with c1:
+            md(f'<div class="sbx"><span>Task {sd["i"] + 1} of {len(tasks)}</span><b>{esc(t["text"])}</b></div>')
+        with c2:
+            if st.button("Give up", key="sb_giveup"):
+                giveup_dialog()
 
 
 @st.dialog("Photo", width="large")
@@ -1381,11 +1465,16 @@ def baseline_open(i):
 
 
 def view_baseline():
-    """The comparison condition: an ordinary gallery. A date-sorted grid, open a photo, select and delete. No search, no suggestions, no assistant."""
+    """The comparison condition: an ordinary gallery. A date-sorted grid, open a photo, select, favourite and delete. No search, no suggestions, no assistant."""
     md('<div class="h1" style="font-size:28px;font-weight:700;margin-bottom:8px">Gallery</div>')
     rows = sorted([r for r in df.itertuples() if arrived_ok(r) and r.id not in S.removed], key=lambda r: r.taken, reverse=True)
     picked = [r.id for r in rows if S.get(f"bl_sel_{r.id}")]
     with st.container(key="sm_bl"):
+        if st.button(f"Add selected to favourites ({len(picked)})", key="bl_fav", disabled=not picked):
+            S.fav.update(picked)
+            for i in picked:
+                S.pop(f"bl_sel_{i}", None)
+            st.rerun()
         if st.button(f"Delete selected ({len(picked)})", key="bl_del", disabled=not picked, type="primary"):
             S.removed.update(picked)
             for i in picked:
@@ -1396,118 +1485,220 @@ def view_baseline():
             cols = st.columns(4)
             for c, r in zip(cols, rows[k:k + 4]):
                 with c:
+                    heart = "♥ " if r.id in S.fav else ""
                     md(f'<img class="att-thumb" style="width:100%;height:auto;aspect-ratio:4/3;flex:none" src="{img_uri(r.file, 360, 270)}" alt="Photo from {r.taken}">'
-                       f'<div class="ccount" style="margin:2px 0 4px">{r.taken}</div>')
+                       f'<div class="ccount" style="margin:2px 0 4px">{heart}{r.taken}</div>')
                     st.checkbox("Select", key=f"bl_sel_{r.id}")
                     if st.button("Open", key=f"bl_open_{r.id}"):
+                        study_seen(r.id)
                         baseline_open(r.id)
 
 
+def reset_library():
+    """Fresh sample library for the next part or participant; keeps the study session itself."""
+    keep = S.study
+    for k in [k for k in S.keys() if str(k).startswith(("bl_sel_", "seq_", "sus_", "tlx_", "ueq_", "trust_"))]:
+        del S[k]
+    S.update(fresh_state())
+    S.study = keep
+    S.view = "study"
+
+
+STUDY_CSS = """<style>
+header[data-testid="stHeader"]{display:none!important}
+.st-key-v_study{max-width:540px;margin:0 auto}
+[data-testid="stMainBlockContainer"]:has(.st-key-v_study){max-width:580px!important;padding:28px 20px 48px!important}
+.st-key-v_study .card{background:transparent!important;border:0!important;box-shadow:none!important;backdrop-filter:none!important;padding:0!important;margin:0!important}
+.st-key-v_study .card p{font-size:16px;line-height:1.5;color:#4B4D63;margin:0 0 10px}
+.st-key-v_study .stButton>button,.st-key-v_study .stFormSubmitButton>button{width:100%!important;min-width:0!important;min-height:54px;border-radius:14px;font-size:16px;font-weight:700}
+.st-key-v_study .stButton>button[kind="secondary"]{background:#fff;border:2px solid #4F46C6;color:#4F46C6}
+.sx-h{font-size:30px;font-weight:800;line-height:1.15;color:#1B1D3A;margin:6px 0 14px}
+.sx-t{font-size:30px;font-weight:800;line-height:1.2;color:#1B1D3A;margin:10px 0 14px}
+.sx-p{font-size:16px;line-height:1.5;color:#5A5C73;margin:0 0 14px}
+.sx-s{font-size:14px;color:#6B6D85;margin:6px 0 4px}
+.sx-segs{display:flex;gap:6px;margin:4px 0 8px}
+.sx-segs i{flex:1;height:5px;border-radius:5px;background:#DEE0EE}
+.sx-segs i.on{background:#4F46C6}
+.sx-lbl{font-size:15px;font-weight:700;color:#1B1D3A;margin:14px 0 4px}
+</style>"""
+
+
+def study_gate(release=False):
+    """Only one participant can be inside the study at a time: the prototype's photo library tables are shared by every visitor, so two people
+    at once would disturb each other's edits. The slot frees itself after 10 minutes without activity."""
+    lock = study_lock()
+    me = S.setdefault("sid", uuid.uuid4().hex)
+    now = time.time()
+    if release:
+        if lock["sid"] == me:
+            lock.update(sid=None, t=0)
+        return True
+    if lock["sid"] in (None, me) or now - lock["t"] > 600:
+        lock.update(sid=me, t=now)
+        return True
+    return False
+
+
+@st.cache_resource
+def study_lock():
+    return {"sid": None, "t": 0}
+
+
 def view_study():
-    appbar("Study mode")
-    snack_ui()
     sd = S.study
-    md('<div class="sub" style="margin-top:0;max-width:720px"><b>Researcher screen.</b> One session is one participant in one condition. Run the app twice per participant '
-       '(PixelSense and Gallery baseline) in counterbalanced order. Data is saved to <b>study_data/</b> as you go.</div>')
+    if sd and sd.get("running"):
+        S.view = "home" if sd["cond"] == "PixelSense" else "baseline"
+        st.rerun()
+    md(STUDY_CSS)
     if not sd:
-        study_setup()
-    elif sd["step"] == "tasks":
-        study_tasks_ui()
-    elif sd["step"] == "survey":
-        study_survey()
+        study_welcome()
     else:
-        study_done()
+        study_gate()
+        {"intro": study_intro, "seq": study_seq, "survey": study_survey, "break": study_break, "final": study_final, "done": study_done}[sd["step"]]()
 
 
-def study_setup():
-    md(f'<div class="card pad glass info"><p><b>Information and consent</b></p><p>{esc(ST.CONSENT)}</p></div>')
-    pid = st.text_input("Participant number", key="st_pid", placeholder="P01")
-    if pid.strip():
-        st.caption(f"Counterbalanced order: {pid.strip()} starts with {ST.counterbalance(pid.strip())}.")
-    cond = st.radio("Condition for this session", ST.CONDITIONS, key="st_cond", horizontal=True)
-    ok = st.checkbox("The participant has read the information above and agrees to take part.", key="st_consent")
-    with st.container(key="sm_stb"):
-        if st.button("Begin session", type="primary", key="st_begin", disabled=not (pid.strip() and ok)):
-            S.study = dict(step="tasks", pid=pid.strip(), cond=cond, i=0, running=False, logs=[], nav=0, undos=0)
+def study_welcome():
+    n_tasks = len(ST.tasks_for("PixelSense", "A")) + len(ST.tasks_for("Gallery (baseline)", "A"))
+    md('<div class="sx-h">Usability study</div>'
+       f'<div class="sx-p">You will complete {n_tasks} short tasks in two versions of a photo app. After each task there is one quick question. '
+       'There are no right or wrong answers: we are testing the app, not you.</div>')
+    default = st.query_params.get("pid") or ST.next_pid()
+    md('<div class="sx-lbl">Participant code</div>')
+    pid = st.text_input("Participant code", value=default, key="st_pid", label_visibility="collapsed").strip()
+    md('<div class="sx-s">Use a new code for each participant.</div>')
+    saved = ST.load_progress(pid) if pid else None
+    if saved and saved.get("step") not in (None, "done"):
+        label = f"Resume at task {saved['i'] + 1}" if saved["step"] == "intro" else "Resume study"
+        if st.button(label, key="st_resume"):
+            if not study_gate():
+                st.warning("Another participant is using the app right now. Please try again in a few minutes.")
+            else:
+                S.study = dict(saved, running=False, nav=0, undos=0)
+                reset_library()
+                st.rerun()
+    md('<div class="sx-lbl">About you</div>')
+    age = st.selectbox("Your age range", ST.AGE_RANGES, index=None, placeholder="Your age range", key="st_age", label_visibility="collapsed")
+    kept = st.selectbox("Photos on your phone", ST.PHOTO_COUNTS, index=None, placeholder="About how many photos are on your phone?", key="st_kept", label_visibility="collapsed")
+    freq = st.selectbox("How often you search or clean up", ST.SEARCH_FREQ, index=None, placeholder="How often do you search for photos or clean up?", key="st_freq", label_visibility="collapsed")
+    md(f'<div class="sx-s">{esc(ST.CONSENT)}</div>')
+    ok = st.checkbox("I have read this and agree to take part.", key="st_consent")
+    if st.button("Begin study", type="primary", key="st_begin", disabled=not (ok and pid and age and kept and freq)):
+        if not study_gate():
+            st.warning("Another participant is using the app right now. Please try again in a few minutes.")
+        else:
+            order = ST.order_for(pid)
+            ST.log_participant(participant=pid, order=" > ".join(order), task_sets=" | ".join(f"{k}:{v}" for k, v in ST.sets_for(pid).items()),
+                               age_range=age, photos_kept=kept, search_freq=freq)
+            S.study = dict(step="intro", pid=pid, order=order, sets=ST.sets_for(pid), part=0, cond=order[0], i=0, running=False, nav=0, undos=0)
+            ST.save_progress(S.study)
             st.rerun()
 
 
-def study_tasks_ui():
+def study_intro():
     sd = S.study
     tasks = study_tasks()
-    md(f'<div class="sect"><b>{esc(sd["pid"])} · {esc(sd["cond"])}</b><span>{sd["i"]} of {len(tasks)} tasks done</span></div>')
-    done = {l["task"]: l for l in sd["logs"]}
-    for n, t in enumerate(tasks):
-        d = done.get(t[0])
-        state = f'{d["success"]} · {d["seconds"]} s' if d else ("Next" if n == sd["i"] else "Waiting")
-        md(f'<div class="card pad glass crow" style="margin-bottom:8px"><div style="flex:1"><div class="rtitle">{esc(t[0])} · {esc(t[2])} <span class="pill gray">{esc(t[1])}</span></div>'
-           f'<div class="ccount">Read aloud: “{esc(t[3])}”</div><div class="att-proof">Success: {esc(t[4])}</div></div>{pill(state, "good" if d else "")}</div>')
+    t = tasks[sd["i"]]
+    segs = "".join(f'<i class="{"on" if k <= sd["i"] else ""}"></i>' for k in range(len(tasks)))
+    about = ("This version has an assistant: you can ask it for things and it finds photos, bills and deadlines for you." if sd["cond"] == "PixelSense"
+             else "This version is a plain gallery: scroll, open photos, select, favourite or delete. There is no search.")
+    md(f'<div class="sx-segs">{segs}</div><div class="sx-s">Part {sd["part"] + 1} of 2 · Task {sd["i"] + 1} of {len(tasks)}</div>')
+    if sd["i"] == 0:
+        md(f'<div class="sx-p" style="margin-top:12px"><b>{esc(about)}</b> The photos are samples, not yours.</div>')
+    md(f'<div class="sx-t">{esc(t["text"])}</div>'
+       '<div class="sx-p">The timer starts when you tap Start. If you can’t finish, tap “Give up” at the top of the screen.</div>')
+    if st.button("Start task", type="primary", key="st_start"):
+        sd.update(running=True, t0=time.time(), nav=0, undos=0, searches=0, seen=set(), fav0=set(S.fav), rem0=set(S.removed), copies0=len(S.copies), cats0=list(S.extra_cats),
+                  done0=set(S.done), man0=len(S.manual), ex0=set(S.excluded_imgs), rm_seen=set(), hint_for="")
+        S.view = "home" if sd["cond"] == "PixelSense" else "baseline"
+        st.rerun()
+
+
+def study_seq():
+    sd = S.study
+    p = sd["pending"]
+    msg = "Nice, that one is done." if p["success"] else "No problem, we have noted that one was too hard."
+    md(f'<div class="card pad glass info"><p><b>{msg}</b></p></div>')
+    seq = st.radio("Overall, how easy or difficult was that task?", [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"seq_{sd['cond']}_{p['task']}")
+    st.caption("1 = very difficult, 7 = very easy")
     with st.container(key="sm_stb"):
-        if sd["i"] < len(tasks):
-            if st.button(f"Start task {sd['i'] + 1}", type="primary", key="st_start"):
-                sd.update(running=True, t0=time.time(), nav=0, undos=0)
-                S.view = "home" if sd["cond"] == "PixelSense" else "baseline"
-                st.rerun()
-        elif st.button("Continue to questionnaires", type="primary", key="st_to_survey"):
-            sd["step"] = "survey"
-            st.rerun()
-        if st.button("Abort session (keeps data already saved)", key="st_abort"):
-            S.update(fresh_state())
-            S.view = "study"
+        if st.button("Next", type="primary", key="seq_next", disabled=seq is None):
+            ST.log_task(participant=sd["pid"], order=" > ".join(sd["order"]), condition=sd["cond"], task_id=p["task"], task_set=p["task_set"], rq=p["rq"], seconds=p["seconds"],
+                        outcome=p["outcome"], success=p["success"], wrong_actions=p["wrong"], photos_opened=p["opened"], searches=p["searches"], undos=p["undos"],
+                        screens_visited=p["nav"], seq=seq)
+            sd["i"] += 1
+            sd.pop("pending")
+            sd["step"] = "survey" if sd["i"] >= len(study_tasks()) else "intro"
+            ST.save_progress(sd)
             st.rerun()
 
 
 def study_survey():
     sd = S.study
-    lab = {1: "1 · Strongly disagree", 5: "5 · Strongly agree"}
-    md('<div class="sub" style="margin-top:0">Hand the screen to the participant. All questions are required.</div>')
-    with st.form("survey_form"):
-        md('<div class="sect"><b>System Usability Scale</b></div>')
-        sus = [st.radio(f"{i + 1}. {q}", [1, 2, 3, 4, 5], index=None, horizontal=True, format_func=lambda v: lab.get(v, str(v)), key=f"sus_{i}") for i, q in enumerate(ST.SUS_ITEMS)]
-        md('<div class="sect"><b>Workload (NASA-TLX)</b></div>')
-        tlx = {k: st.slider(f"{name}. {q}", 0, 100, 50, 5, key=f"tlx_{k}") for k, name, q in ST.TLX_ITEMS}
+    c = sd["cond"]
+    md(f'<div class="sub" style="margin-top:0">Part {sd["part"] + 1} is finished. A few quick questions about this version. All are required.</div>')
+    with st.form(f"survey_form_{c}"):
+        md('<div class="sect"><b>About this app</b></div><div class="sub" style="margin-top:0">1 = strongly disagree, 5 = strongly agree.</div>')
+        sus = [st.radio(f"{i + 1}. {q}", [1, 2, 3, 4, 5], index=None, horizontal=True, key=f"sus_{c}_{i}") for i, q in enumerate(ST.SUS_ITEMS)]
+        md('<div class="sect"><b>How did it feel?</b></div><div class="sub" style="margin-top:0">Move each slider.</div>')
+        tlx = {k: st.slider(f"{name}. {q}", 0, 100, 50, 5, key=f"tlx_{c}_{k}") for k, name, q in ST.TLX_ITEMS}
         ueq, trust = [None] * 8, [None] * 3
-        if sd["cond"] == "PixelSense":
-            md('<div class="sect"><b>Experience (UEQ-S)</b></div><div class="sub" style="margin-top:0">Pick the point between the two words that matches your impression.</div>')
-            ueq = [st.radio(f"{a}  ←→  {b}", [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"ueq_{i}") for i, (a, b) in enumerate(ST.UEQ_S)]
+        if c == "PixelSense":
+            md('<div class="sect"><b>Your impression</b></div><div class="sub" style="margin-top:0">Pick the point between the two words that fits best (1 = left word, 7 = right word).</div>')
+            ueq = [st.radio(f"{a}  ←→  {b}", [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"ueq_{c}_{i}") for i, (a, b) in enumerate(ST.UEQ_S)]
             md('<div class="sect"><b>Trust and control</b></div><div class="sub" style="margin-top:0">1 = strongly disagree, 7 = strongly agree.</div>')
-            trust = [st.radio(q, [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"trust_{i}") for i, q in enumerate(ST.TRUST_ITEMS)]
-        md('<div class="sect"><b>Interview</b></div>')
-        notes = st.text_area("Researcher notes and quotes: what worked, what confused them, would they use it?", key="iv_notes", height=120)
+            trust = [st.radio(q, [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"trust_{c}_{i}") for i, q in enumerate(ST.TRUST_ITEMS)]
         submitted = st.form_submit_button("Save answers", type="primary")
     if submitted:
         if None in sus or None in ueq or None in trust:
             st.warning("Please answer every question.")
             return
-        row = dict(participant=sd["pid"], condition=sd["cond"], sus_score=ST.sus_score(sus), tlx_raw=ST.tlx_raw(tlx), interview_notes=notes.replace("\n", " "))
+        row = dict(participant=sd["pid"], condition=c, sus_score=ST.sus_score(sus), tlx_raw=ST.tlx_raw(tlx))
         row.update({f"sus_{i + 1}": v for i, v in enumerate(sus)})
         row.update({f"tlx_{k}": v for k, v in tlx.items()})
-        if sd["cond"] == "PixelSense":
+        if c == "PixelSense":
             row.update({f"ueq_{i + 1}": v for i, v in enumerate(ueq)})
             row["ueq_pragmatic"], row["ueq_hedonic"] = ST.ueq_scores(ueq)
             row.update({f"trust_{i + 1}": v for i, v in enumerate(trust)})
         ST.log_questionnaire(**row)
-        sd["scores"] = row
-        sd["step"] = "done"
+        sd["step"] = "break" if sd["part"] == 0 else "final"
+        ST.save_progress(sd)
         st.rerun()
+
+
+def study_break():
+    sd = S.study
+    md(f'<div class="card pad glass info"><p><b>Part 1 done. Thank you.</b></p><p>Part 2 uses the other version of the app. '
+       f'It looks and works differently, so the same kind of tasks may feel different. Take a short break if you like.</p></div>')
+    with st.container(key="sm_stb"):
+        if st.button("Start part 2", type="primary", key="st_p2"):
+            reset_library()
+            S.study.update(part=1, cond=sd["order"][1], i=0, step="intro")
+            ST.save_progress(S.study)
+            st.rerun()
+
+
+def study_final():
+    sd = S.study
+    pref = st.radio("Which version would you rather use for your own photos?", ["PixelSense (with assistant)", "Plain gallery", "No preference"], index=None, key="fin_pref")
+    use = st.radio("Would you use PixelSense’s search and “Needs attention” in real life?", ["Yes", "Maybe", "No"], index=None, horizontal=True, key="fin_use")
+    easy = st.text_area("What worked best?", key="fin_easy", height=80)
+    conf = st.text_area("What was confusing or frustrating?", key="fin_conf", height=80)
+    with st.container(key="sm_stb"):
+        if st.button("Finish", type="primary", key="fin_go", disabled=not (pref and use)):
+            ST.log_final(participant=sd["pid"], preferred=pref, would_use=use, easiest=easy.replace("\\n", " "), most_confusing=conf.replace("\\n", " "))
+            sd["step"] = "done"
+            ST.save_progress(sd)
+            study_gate(release=True)
+            st.rerun()
 
 
 def study_done():
     sd = S.study
-    sc = sd["scores"]
-    md(f'<div class="card pad glass info"><p><b>Session saved for {esc(sd["pid"])} · {esc(sd["cond"])}.</b></p>'
-       f'<p>SUS {sc["sus_score"]} (about 68 is average) · NASA-TLX raw {sc["tlx_raw"]}'
-       + (f' · UEQ-S pragmatic {sc["ueq_pragmatic"]}, hedonic {sc["ueq_hedonic"]}' if "ueq_pragmatic" in sc else "") + '</p></div>')
-    with st.container(key="sm_dl"):
-        c1, c2, _sp = st.columns([1, 1, 1])
-        with c1:
-            st.download_button("Download tasks.csv", ST.read_csv_bytes("tasks.csv"), file_name="tasks.csv", mime="text/csv", key="dl_tasks")
-        with c2:
-            st.download_button("Download questionnaires.csv", ST.read_csv_bytes("questionnaires.csv"), file_name="questionnaires.csv", mime="text/csv", key="dl_q")
+    md(f'<div class="card pad glass info"><p><b>All done. Thank you!</b></p><p>Your participant number was <b>{esc(sd["pid"])}</b>. You can close this page now.</p></div>')
     with st.container(key="sm_stb"):
-        if st.button("Start next session", type="primary", key="st_next"):
-            S.update(fresh_state())
-            S.view = "study"
+        if st.button("Return to start screen", key="st_next"):
+            S.study = None
+            reset_library()
             st.rerun()
 
 
@@ -2182,6 +2373,8 @@ def view_settings():
     else:
         md('<div class="sub" style="margin-top:0">Chat works offline with built-in replies and editing commands. For free conversation, set the ANTHROPIC_API_KEY environment variable, run <b>pip install anthropic</b>, then restart the app.</div>')
 
+    if S.study:
+        return
     md('<div class="sect" style="margin-top:16px"><b>Researcher tools</b></div>'
        '<div class="sub" style="margin-top:0">Open study mode to run an evaluation session, simulate new photos arriving, or reset everything so the next participant starts fresh.</div>')
     with st.container(key="sm_arrive"):
@@ -2194,6 +2387,9 @@ def view_settings():
     with st.container(key="sm_study"):
         if st.button("Open study mode", key="open_study"):
             go("study")
+    with st.container(key="sm_dl"):
+        for _f in ("participants", "tasks", "questionnaires", "final"):
+            st.download_button(f"Download {_f}.csv", ST.read_csv_bytes(f"{_f}.csv"), file_name=f"{_f}.csv", mime="text/csv", key=f"dl_{_f}")
     with st.container(key="danger_reset"):
         if st.button("Reset prototype", key="reset"):
             for k in list(S.keys()):
@@ -2287,7 +2483,7 @@ if S.study and S.study.get("running"):
 
 if S.view in ("chat", "results"):      # prompt bar lives on the Ask screen only
     composer()
-if S.view != "baseline":
+if S.view not in ("baseline", "study"):
     drawer()
 
 if S.scroll:
