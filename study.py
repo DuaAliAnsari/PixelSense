@@ -1,7 +1,7 @@
 """Evaluation kit: tasks, questionnaires, scoring and data files for the usability study.
 
 Design (see RESEARCH_PLAN.md): a within-subjects comparison. Each participant does matched tasks twice, once with PixelSense and
-once with a plain 'Gallery (baseline)' that has no search, no suggestions and no assistant, in counterbalanced order.
+once with 'Classic', a typical gallery app in the style of Google Photos, in counterbalanced order.
 One session = one participant + one condition. Run the app twice per participant.
 
 Data is appended to study_data/tasks.csv and study_data/questionnaires.csv the moment it is collected, so nothing is lost
@@ -18,62 +18,52 @@ from datetime import datetime
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "study_data"
-CONDITIONS = ["PixelSense", "Gallery (baseline)"]
+CONDITIONS = ["PixelSense", "Classic"]
 
 CONSENT = ("You are invited to take part in a short usability study of a photo app. It takes about 15 minutes. "
            "You will do a few tasks in two versions of the app, answer short questions after each task and each version, and tell us what you think. "
            "The photos are samples, not yours. If a task is too hard you can tap Give up at any time; that is useful for us and is not a failure on your part. "
            "We record task times, taps and your answers under a participant number, not your name. You may stop at any time without giving a reason.")
 
-# Six task types, each in two parallel versions (set A and set B) so nobody repeats the same task in the second condition.
-# Each participant does one set with PixelSense and the other with the Gallery baseline (which set goes with which condition rotates
-# with the participant number), then PixelSense-only editing and core tasks. Total per participant: 6 + 6 + 8 = 20 tasks.
-# Success is detected by the app: the correct photo was opened, the right photos were favourited, enough of the right photos were removed,
-# or the edited copy was saved. Nothing is typed and nobody has to watch.
-# kind: open = any target photo opened; fav = all targets favourited; clean = 5+ removed and 4+ of them are targets; bw = B&W copy of a beach photo.
-TYPES = [
-    dict(type="F1", rq="RQ1", title="Find by text in a screenshot", kind="open",
-         A=("Find and open the screenshot of the lecture slide about cognitive load theory.", {"img14"}),
-         B=("Find and open the screenshot of a doctor’s contact card.", {"img52"})),
-    dict(type="F2", rq="RQ1", title="Find a bill or receipt", kind="open",
-         A=("Find and open the electricity bill from July 2024.", {"img62"}),
-         B=("Find and open the Imtiaz Supermarket grocery receipt.", {"img08"})),
-    dict(type="F3", rq="RQ1", title="Find by people and scene", kind="open",
-         A=("Find and open a photo of a family sitting together in a field.", {"img25"}),
-         B=("Find and open a photo of a bride with her bridesmaids.", {"img87"})),
-    dict(type="F4", rq="RQ1", title="Find by place", kind="open",
-         A=("Find and open the photo of a beach sunset with a camel.", {"img36"}),
-         B=("Find and open the photo of snow-capped mountains above a green valley.", {"img68"})),
-    dict(type="S1", rq="RQ3", title="Surface what matters", kind="fav",
-         A=("Mark with a heart (♥) the two bills that are coming due soon.", {"img10", "img11"}),
-         B=("Mark with a heart (♥) the assignment deadline and the Tech Fest event that are coming up.", {"img13", "img18"})),
-    dict(type="C1", rq="RQ2", title="Clean up", kind="clean",
-         A=("Free up space: remove at least 5 blurry photos.", {"img06", "img38", "img39", "img40", "img41", "img42", "img43"}),
-         B=("Free up space: remove at least 5 memes or joke screenshots.", {f"img{n}" for n in range(73, 80)})),
+# One task per everyday photo-app category, each in two parallel versions (set A and set B) so nobody repeats the same task in the second condition.
+# Each participant does one set with PixelSense and the other with Classic, a typical gallery app in the style of Google Photos
+# (Photos, Search and Library tabs; search matches file names only; manual albums; no assistant, no suggestions, no deadline tracking).
+# Which set goes with which condition rotates with the participant number. 10 categories x 2 conditions = 20 tasks per participant.
+# Success is detected by the app itself (target photo opened, favourited, deleted, restored, cropped copy saved, album made, person screen
+# opened, signed out), so nothing is typed and nobody has to watch. Search targets are chosen so that they cannot be found from a chip or a
+# recent search: the suggestion chips are hidden and recent searches are cleared before every task.
+CATEGORIES = [
+    dict(type="T1", rq="RQ1", title="Search for a photo", kind="open",
+         A=("Find and open the screenshot that has a surgeon’s phone number.", {"img52"}),
+         B=("Find and open the photo of friends and family sharing dinner around a table.", {"img24", "img29", "img30"})),
+    dict(type="T2", rq="RQ2", title="Favourite a photo", kind="fav",
+         A=("Add the photo of biryani and karahi to your favourites.", {"img37"}),
+         B=("Add the photo of the chocolate cake slice to your favourites.", {"img53", "img54"})),
+    dict(type="T3", rq="RQ2", title="Edit a photo (crop)", kind="crop",
+         A=("Crop the photo of the snow-capped mountains and save the cropped copy.", {"img68"}),
+         B=("Crop the photo of the green valley with a river and clouds and save the cropped copy.", {"img80"})),
+    dict(type="T4", rq="RQ2", title="Delete a photo", kind="delete",
+         A=("Delete the photo of handwritten pre-calculus notes.", {"img81"}),
+         B=("Delete the photo of the blank electricity bill form.", {"img70"})),
+    dict(type="T5", rq="RQ2", title="Restore a deleted photo", kind="restore",
+         A=("The chocolate cake photo was deleted by mistake. Bring it back.", {"img53"}),
+         B=("The photo of the other chocolate cake slice was deleted by mistake. Bring it back.", {"img54"})),
+    dict(type="T6", rq="RQ3", title="Find a deadline", kind="open",
+         A=("Find out when the HCI assignment is due. Open the photo that shows it.", {"img13"}),
+         B=("Find out when the internet bill is due. Open the photo that shows it.", {"img11"})),
+    dict(type="T7", rq="RQ1", title="Find all photos of a person", kind="person",
+         A=("Show all the photos of Sara.", {"sara"}),
+         B=("Show all the photos of yourself (you are the person in your profile picture).", {"me"})),
+    dict(type="T8", rq="RQ2", title="Make an album", kind="album", name_A="Trip", name_B="Weekend",
+         A=("Create an album called Trip and put at least 2 photos in it.", set()),
+         B=("Create an album called Weekend and put at least 2 photos in it.", set())),
+    dict(type="T9", rq="RQ3", title="Free up space", kind="clean", min_A=4, min_B=4,
+         A=("Free up space: delete at least 4 blurry photos.", {"img38", "img39", "img40", "img41", "img42", "img43"}),
+         B=("Free up space: delete all 4 meme screenshots.", {"img73", "img74", "img75", "img76"})),
+    dict(type="T10", rq="RQ2", title="Sign out", kind="logout",
+         A=("Sign out of your account.", set()),
+         B=("Sign out of your account.", set())),
 ]
-EDIT_TASK = dict(type="E1", rq="RQ4", title="Edit by prompt", kind="bw",
-                 text="Make a beach photo black and white and save it as a copy.", targets=set())
-BEACH_IDS = {"img22", "img36", "img49"}
-
-# Core photo-app tasks, the things people do in any gallery app such as Google Photos (PixelSense only; the plain Gallery baseline has no
-# equivalent of most of them). They test the usability of the app itself rather than a comparison.
-CORE = [
-    dict(id="M1", rq="RQ6", title="Delete and restore (trash)", kind="restore", targets={"img53", "img54", "img55"},
-         text="Remove one photo of the chocolate cake, then bring it back."),
-    dict(id="E2", rq="RQ4", title="Crop a photo", kind="crop", targets={"img68"},
-         text="Crop the photo of the snow-capped mountains and save the cropped copy."),
-    dict(id="M2", rq="RQ6", title="Make an album", kind="album", targets=set(),
-         text="Create a new collection called Trip and put at least 2 photos in it."),
-    dict(id="P1", rq="RQ6", title="View photos by face", kind="face", targets={"sara"},
-         text="Show all the photos of Sara."),
-    dict(id="M3", rq="RQ6", title="Act on a bill", kind="paid", targets={"img10"},
-         text="Mark the electricity bill as paid."),
-    dict(id="M4", rq="RQ6", title="Add a deadline", kind="deadline", targets=set(),
-         text="Add a reminder for a passport renewal due next month."),
-    dict(id="P2", rq="RQ5", title="Stay in control of AI", kind="control", targets=set(),
-         text="Choose any one photo and stop the app’s AI from using it."),
-]
-CLEAN_MIN, CLEAN_MIN_CORRECT = 5, 4
 
 
 def sets_for(pid: str) -> dict:
@@ -81,16 +71,12 @@ def sets_for(pid: str) -> dict:
     digits = "".join(ch for ch in pid if ch.isdigit())
     n = int(digits) if digits else 1
     ps = "A" if ((n - 1) // 2) % 2 == 0 else "B"
-    return {"PixelSense": ps, "Gallery (baseline)": "B" if ps == "A" else "A"}
+    return {"PixelSense": ps, "Classic": "B" if ps == "A" else "A"}
 
 
 def tasks_for(cond: str, set_letter: str) -> list:
-    out = [dict(id=t["type"], task_set=set_letter, rq=t["rq"], title=t["title"], kind=t["kind"], text=t[set_letter][0], targets=t[set_letter][1]) for t in TYPES]
-    if cond == "PixelSense":
-        e = EDIT_TASK
-        out.append(dict(id=e["type"], task_set="-", rq=e["rq"], title=e["title"], kind=e["kind"], text=e["text"], targets=e["targets"]))
-        out += [dict(task_set="-", **{k: v for k, v in c.items()}) for c in CORE]
-    return out
+    return [dict(id=t["type"], task_set=set_letter, rq=t["rq"], title=t["title"], kind=t["kind"], text=t[set_letter][0], targets=t[set_letter][1],
+                 name=t.get("name_" + set_letter, ""), min=t.get("min_" + set_letter, 0)) for t in CATEGORIES]
 
 
 AGE_RANGES = ["18-22", "23-27", "28-35", "36+"]

@@ -16,7 +16,7 @@ qs = pd.read_csv(D / "questionnaires.csv")
 tasks["gave_up"] = (tasks["outcome"] == "gave_up").astype(int)
 print(f"Participants with task data: {tasks['participant'].nunique()}\n")
 
-print("=== Task performance by condition (F1-F4 = RQ1, C1 = RQ2, S1 = RQ3, E1 = RQ4) ===")
+print("=== Task performance by condition (T1 to T10) ===")
 g = tasks.groupby(["task_id", "rq", "condition"])
 summary = g.agg(n=("participant", "nunique"), success_rate=("success", "mean"), gave_up_rate=("gave_up", "mean"),
                 median_s=("seconds", "median"), mean_s=("seconds", "mean"), wrong=("wrong_actions", "mean"), opened=("photos_opened", "mean"), searches=("searches", "mean"),
@@ -24,7 +24,7 @@ summary = g.agg(n=("participant", "nunique"), success_rate=("success", "mean"), 
 print(summary.to_string(), "\n")
 # Time is compared on successful attempts only; gave-up times are censored and reported as a rate.
 ok = tasks[tasks["success"] == 1]
-print("=== Paired comparison (PixelSense vs Gallery), per task ===")
+print("=== Paired comparison (PixelSense vs Classic), per task ===")
 for tid, t in tasks.groupby("task_id"):
     if t["condition"].nunique() < 2:
         continue
@@ -33,8 +33,8 @@ for tid, t in tasks.groupby("task_id"):
         w = src.pivot_table(index="participant", columns="condition", values=col).dropna()
         if len(w) < 3:
             print(f"{tid} {metric}: fewer than 3 complete pairs, report descriptively"); continue
-        a, b = w["PixelSense"], w["Gallery (baseline)"]
-        line = f"{tid} {metric}: PixelSense {a.mean():.2f} vs Gallery {b.mean():.2f} (n={len(w)} pairs)"
+        a, b = w["PixelSense"], w["Classic"]
+        line = f"{tid} {metric}: PixelSense {a.mean():.2f} vs Classic {b.mean():.2f} (n={len(w)} pairs)"
         if stats is not None and (a - b).abs().sum() > 0:
             line += f", Wilcoxon p={stats.wilcoxon(a, b).pvalue:.3f}, r={(a - b).mean() / (a - b).std(ddof=1) if (a - b).std(ddof=1) else float('nan'):.2f} (dz)"
         print(line)

@@ -697,9 +697,10 @@ def duplicate_ids(rows, max_dist=56):
     ph = sorted([r for r in rows if r.type == "photo" and not str(r.id).startswith("ed")],   # edited copies are not clutter
  key=lambda r: -quality(r.file)["sharp"])
     keep, flagged = [], set()
+    when = {r.id: pd.to_datetime(r.taken) for r in ph}          # converted once, not inside the comparison loop
     for r in ph:
         h = _hash(r.file)
-        match = next((k for k in keep if abs((pd.to_datetime(k.taken) - pd.to_datetime(r.taken)).days) <= 1
+        match = next((k for k in keep if abs((when[k.id] - when[r.id]).days) <= 1
                       and int((h != _hash(k.file)).sum()) <= max_dist), None)
         if match:
             flagged.add(r.id)
@@ -713,7 +714,23 @@ def has_people(r):
     return r.id in FACES_IN or bool(PEOPLE_WORDS.search(r.description))
 
 
+_CG_CACHE: dict = {}
+
+
 def cleanup_groups(rows, kept=()):
+    """Cached wrapper: the app asks for these groups on almost every screen, and the measurements behind them are slow."""
+    rows = list(rows)
+    key = (tuple(r.id for r in rows), frozenset(kept), frozenset(OPENED), date.today())
+    hit = _CG_CACHE.get(key)
+    if hit is None:
+        hit = _cleanup_groups(rows, kept)
+        if len(_CG_CACHE) > 64:
+            _CG_CACHE.clear()
+        _CG_CACHE[key] = hit
+    return {k: list(v) for k, v in hit.items()}
+
+
+def _cleanup_groups(rows, kept=()):
     """Group the photos the AI may use into clean-up suggestions. A photo is suggested in one group only,
     by this priority: blurry, low-res, near-duplicate, screenshot, not opened in a year."""
     out = {k: [] for k in CLEAN_META}

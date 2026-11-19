@@ -6,25 +6,22 @@ PixelSense is a chat-first, privacy-controlled photo assistant. It helps people 
 Because the prototype's AI is simulated (prepared text and face groups), the study evaluates the **interaction design**, not recognition accuracy.
 
 ## 2. Research questions
-**Main RQ.** How does a chat-first, privacy-controlled photo assistant affect people's ability to find, clean up and act on information in their photo libraries, compared with a conventional gallery?
+Comparison: **PixelSense** against **Classic**, a typical gallery app in the style of Google Photos (Photos, Search and Library tabs; search matches file names; albums made by hand; favourites, trash, people, editor and account menu; no assistant, no suggestions, no deadline tracking, no clean-up suggestions).
 
-| RQ | Question | Task | Measures |
+| RQ | Question | Tasks | Measures |
 |---|---|---|---|
-| RQ1 Finding | Does natural-language search help people find photos and facts faster and more accurately than browsing? | F1 to F4 | Success, time, errors, screens visited |
-| RQ2 Clean-up | Do grouped suggestions reduce the effort of clearing a library, without regret? | C1 | Time, photos removed, undo count, NASA-TLX |
-| RQ3 Surfacing | Does Needs attention help people notice upcoming bills and deadlines? | S1 | Success (items found), time, confidence |
-| RQ4 Editing | Can people make an edit with a chat prompt instead of manual tools? | E1 (PixelSense only) | Success, time, errors |
-| RQ6 Core usability | Can people complete everyday photo-app tasks (trash and restore, albums, view by face, act on a bill, add a deadline) without help? | M1 to M4, P1 | Success, time, wrong actions, SEQ |
-| RQ5 Trust and control | Do the privacy and control features make people feel in control and willing to trust it? | Whole session | SUS, UEQ-S, trust items, interview themes |
+| RQ1 Finding | Does natural-language search help people find photos, facts and people faster and more accurately than file-name search and browsing? | T1, T7 | Success, time, wrong actions, searches, SEQ |
+| RQ2 Everyday actions | Are everyday photo actions (favourite, edit, delete, restore, albums, sign out) as easy in PixelSense as in a familiar app? | T2, T3, T4, T5, T8, T10 | Success, time, wrong actions, SEQ |
+| RQ3 Surfacing and clean-up | Do Coming up and Clean up help people notice deadlines and clear clutter faster than manual work? | T6, T9 | Success, time, wrong actions, SEQ, NASA-TLX |
+| RQ4 Trust and control | Do the privacy and control features make people feel in control and willing to trust it? | Whole session | SUS, UEQ-S, trust items, preference |
 
-**Hypotheses.** H1: PixelSense is faster and more accurate than the baseline for F1 to F4 and S1. H2: workload (NASA-TLX) is lower with PixelSense for C1. H3: SUS is above 68 for PixelSense. H4: trust and control items score above the scale midpoint (4 of 7). Drop RQ4 if you do not want to claim anything about editing.
+**Hypotheses.** H1: PixelSense is faster and more accurate than Classic for finding (T1, T6, T7). H2: it is as easy as Classic for everyday actions (no worse on success and SEQ). H3: workload (NASA-TLX) is lower with PixelSense. H4: SUS for PixelSense is above the benchmark of 68. H5: trust items sit above the scale midpoint.
 
 ## 3. Design
-- **Within-subjects comparison.** Every participant does the same tasks in two conditions: **PixelSense** and **Gallery (baseline)** (a date-sorted grid with open, select and delete; no search, no suggestions, no assistant). T5 is PixelSense only.
-- **Counterbalanced order.** Odd participant numbers start with PixelSense, even numbers with the baseline (the app suggests this when you type the number).
-- **Participants.** About 8 to 15 smartphone users who keep many photos. Record age range, how many photos they keep, and how often they search or clean their library. Exclude anyone who has seen the prototype. Say clearly whether they are students or a wider sample.
-- **Materials.** The sample photos in this prototype (not participants' own photos, which avoids privacy problems).
-- **Procedure (about 20 to 25 minutes per condition).** Consent, short demo of the interface, tasks T1 to T4 (and T5), think-aloud throughout, SUS and NASA-TLX (plus UEQ-S and trust items for PixelSense), then a short interview. Run the second condition after a break.
+- **Within-subjects.** Every participant uses both conditions. Each does 10 tasks per condition (20 in total), one task for each everyday category.
+- **Parallel task sets.** Each category has a set A and a set B version, so no task is repeated. Which set goes with which condition rotates with the participant number; with the order of the two conditions, all four combinations are used equally often.
+- **Fair search tasks.** Targets are chosen so they cannot be found from a suggestion chip or recent search: chips are hidden during the study and recent searches and chats are cleared before every task.
+- **Fully self-guided on a phone.** The app detects success itself, so no researcher is needed.
 
 ## 4. Measures
 | Type | Measure | How it is collected |
@@ -41,32 +38,26 @@ Because the prototype's AI is simulated (prepared text and face groups), the stu
 | Qualitative | Free-text answers (best, confusing), optional think-aloud subset | final.csv |
 
 ## 5. Tasks
-Six task types, each in two parallel versions (set A, set B). Each participant does one set with PixelSense and the other with the Gallery, so no task is repeated; which set goes with which condition rotates with the participant number (all four order x set combinations are used equally often). PixelSense-only task E1 comes last. 20 tasks per participant (6 + 6 + 8), about 15 to 18 minutes plus questionnaires. The core tasks are the everyday actions of a mainstream gallery app such as Google Photos; the Gallery baseline has no equivalent of most of them, so they are reported as standalone usability results (success, time, wrong actions, SEQ), not as a comparison.
-
-| Type | RQ | Set A | Set B |
+| Category | RQ | Set A | Set B |
 |---|---|---|---|
-| F1 Find by text | RQ1 | Lecture slide on cognitive load theory | Doctor's contact card |
-| F2 Find a bill or receipt | RQ1 | Electricity bill, July 2024 | Imtiaz Supermarket receipt |
-| F3 Find by people and scene | RQ1 | Family sitting in a field | Bride with bridesmaids |
-| F4 Find by place | RQ1 | Beach sunset with a camel | Snow-capped mountains above a green valley |
-| S1 Surface what matters | RQ3 | Heart the two bills due soon | Heart the assignment deadline and the Tech Fest event |
-| C1 Clean up | RQ2 | Remove 5+ blurry photos | Remove 5+ memes |
-| E1 Edit by prompt | RQ4 | Black-and-white copy of a beach photo (PixelSense only) | same |
-| E2 Crop | RQ4 | Crop the snow-capped mountains photo and save the copy (PixelSense only) | same |
-| M1 Trash and restore | RQ6 | Remove a chocolate cake photo, then restore it (PixelSense only) | same |
-| M2 Make an album | RQ6 | Create the collection "Trip" with 2+ photos (PixelSense only) | same |
-| P1 View by face | RQ6 | Show all photos of Sara (PixelSense only) | same |
-| M3 Act on a bill | RQ6 | Mark the electricity bill as paid (PixelSense only) | same |
-| M4 Add a deadline | RQ6 | Add a passport-renewal reminder (PixelSense only) | same |
-| P2 Control over AI | RQ5 | Stop the AI using one photo (PixelSense only) | same |
+| T1 Search for a photo | RQ1 | Screenshot with a surgeon's phone number | Friends and family sharing dinner |
+| T2 Favourite a photo | RQ2 | Biryani and karahi photo | Chocolate cake photo |
+| T3 Edit (crop) | RQ2 | Snow-capped mountains | Green valley with river and clouds |
+| T4 Delete a photo | RQ2 | Handwritten pre-calculus notes | Blank electricity bill form |
+| T5 Restore a deleted photo | RQ2 | Chocolate cake (deleted before the task) | The other chocolate cake photo |
+| T6 Find a deadline | RQ3 | When is the HCI assignment due | When is the internet bill due |
+| T7 Find all photos of a person | RQ1 | Sara | Yourself (profile picture) |
+| T8 Make an album | RQ2 | Album "Trip" with 2+ photos | Album "Weekend" with 2+ photos |
+| T9 Free up space | RQ3 | Delete 4+ blurry photos | Delete all 4 meme screenshots |
+| T10 Sign out | RQ2 | Sign out | Sign out |
 
-**Automatic success rules.** F1 to F4: a target photo was opened. S1: all target photos hearted. C1: 5 or more photos removed, at least 4 of them from the target group. E1: a saved B&W copy of a beach photo. Core task rules: M1 a cake photo was removed and is back; E2 a saved copy of the mountain photo with a crop or aspect change; M2 a new collection called Trip holding 2+ photos; P1 the Sara person screen was opened; M3 the electricity bill ticked off; M4 a deadline was added; P2 at least one photo had AI stopped. Wrong actions are counted per task (non-target photos opened, hearted or removed). The task ends the moment the rule is met, or when the participant taps Give up.
+**Automatic success rules.** T1 and T6: a target photo was opened. T2: a target was favourited. T3: a saved copy of the target with a crop or aspect change. T4: the target was deleted. T5: the target is out of the trash. T7: the person's screen was opened. T8: an album with that name holds 2+ photos. T9: the required number of target photos was deleted. T10: the user signed out. Wrong actions are counted per task (non-target photos opened, favourited or deleted). A task ends the moment its rule is met, or when the participant taps Give up.
 
 ## 5. Running the study (self-guided, on phones)
 Participants run the whole session alone. Nobody has to sit next to them.
 1. Start the app and open it on the phone with `?study=1` on the end of the address (for example `http://<your-laptop-ip>:8501/?study=1`; phone and laptop on the same Wi-Fi). Put this link in a QR code.
 2. The participant reads the consent text, answers three background questions (age range, photos on phone, how often they search or clean up), and taps **Start the study**. A participant number (P01, P02, ...) and the condition order are assigned automatically, so order is counterbalanced without you.
-3. **Part 1 and Part 2** (PixelSense and Gallery, in the assigned order). For each task: read it, tap **Start task** (timer starts), do it, or tap **Give up**. There is no done button: the app decides. Nothing is typed. See the success rules in Section 5.
+3. **Part 1 and Part 2** (PixelSense and Classic, in the assigned order). For each task: read it, tap **Start task** (timer starts), do it, or tap **Give up**. There is no done button: the app decides. Nothing is typed. See the success rules in Section 5.
 4. After every task: one **Single Ease Question** (1 to 7). After every part: **SUS** and **NASA-TLX**, plus **UEQ-S** and **trust items** for PixelSense.
 5. At the end: preferred version, would-use, and two free-text boxes (best, confusing).
 6. Download the CSVs from Settings, **Researcher tools** (hidden while a study is running). Run `python analyze.py`.
@@ -84,7 +75,7 @@ Files written to `study_data/` as the participant goes: `participants.csv`, `tas
 - Simulated AI: results speak to the interface, not to real recognition accuracy.
 - Small, convenience sample, probably students; limited generalisation.
 - Sample photos, not participants' own libraries, so personal relevance and privacy feelings are only partly captured.
-- The baseline is a simple gallery built for this study, not a commercial product such as Google Photos.
+- Classic is a gallery built for this study in the style of Google Photos, not the commercial product itself, and its search is deliberately limited to file names.
 - Short exposure; novelty effects; first-use only.
 - Success is checked by simple rules (target photo opened, hearted or removed), so a participant who finds the right photo by luck is marked successful; `photos_opened` and `wrong_actions` show how much guessing happened.
 - Unsupervised sessions: no think-aloud for everyone, and participants may be distracted.
