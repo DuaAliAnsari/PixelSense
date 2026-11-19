@@ -52,7 +52,8 @@ CAT_RULES = [  # simulated AI: first matching rule wins (whole words only, read 
     ("Shopping", ["sale", "listing", "laptop", "shoes", "order", "payment"]),
     ("Food", ["biryani", "food", "cake", "karahi", "iftar", "dishes"]),
 ]
-HELD = {"img03", "img07", "img16"}  # "new images" the researcher can make arrive
+_ALL_IDS = set(df.id)
+HELD = {i for i in ("img16", "img100") if i in _ALL_IDS}  # "new images" the researcher can make arrive
 TYPE_WORDS = {"photo": "photo", "photos": "photo", "screenshot": "screenshot", "screenshots": "screenshot",
               "receipt": "receipt", "receipts": "receipt", "bill": "bill", "bills": "bill", "ticket": "ticket",
               "tickets": "ticket", "document": "document", "documents": "document"}

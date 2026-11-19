@@ -24,7 +24,7 @@ Keep `.streamlit/config.toml` next to `app.py` (it locks the light theme).
 - **Photos, People, Collections, Favorites:** timeline by month; face groups (tap a face to see all their photos, name, hide, "Wrong person?" fix, "Often with"); auto-sorted and your own collections; photo details with "Why this result?".
 - **Clean up:** groups photos you may not need: blurry and low-resolution (real sharpness and size measurements), **near-duplicates** (a real image fingerprint, the sharpest of each set stays out of the list), old screenshots, **not opened in over a year**. Review, Keep, or Remove (undoable, originals untouched).
 - **Add a deadline:** deadlines that never became a photo can be typed, or pasted from a message (SMS, email, chat). PixelSense finds the date and amount in the pasted text and shows the words it used.
-- **Study mode (self-guided usability test):** open the app with `?study=1`. Consent, auto participant number and counterbalanced order, timed tasks with **Give up** (success is detected automatically), automatic success checks, Single Ease Question per task, SUS, NASA-TLX, UEQ-S and trust questionnaires, a plain **Gallery (baseline)** condition for comparison, CSV export (Settings, Researcher tools) and `analyze.py`. See **RESEARCH_PLAN.md**.
+- **Study mode (evaluation kit):** Settings, Open study mode. Consent, counterbalanced condition, timed tasks with a task bar, a plain **Gallery (baseline)** condition for comparison, built-in SUS, NASA-TLX, UEQ-S and trust questionnaires, and CSV export. See **RESEARCH_PLAN.md**.
 - **Photo editor:** Adjust, Crop & rotate, Filters, Resolution (2x / 4x), with live preview and *Show original*. Save as a copy to a collection or download. Originals are never changed. Editing is ordinary image processing (Pillow); "improve resolution" is resampling with gentle sharpening, not generative super-resolution.
 - **Edit by chat:** e.g. `Make the wedding photos black and white and save to Eid`, then `make it brighter`.
 - **Smart chat (optional):** turn on in Settings (needs `ANTHROPIC_API_KEY` and `pip install anthropic`). It sends your message and the *text descriptions* of photos the AI may use, never the photos.
@@ -70,7 +70,7 @@ Face groups are opt-in and can be turned off and forgotten. You name people. Eve
 - To add a photo: put the file in `images/`, add a row to `manifest.csv` (`tags` = what is visible, 10 to 15 words; `wearing` = clothes and colours; `visible_text` = words printed in the image), and add its face boxes to `faces.csv`. Use the same `person_id` for the same person in every photo.
 
 ## Researcher tools (Settings, bottom)
-Simulate 3 new photos arriving, and Reset prototype between participants.
+Simulate 2 new photos arriving, and Reset prototype between participants.
 
 ## Files
 | File | Purpose |
@@ -78,7 +78,6 @@ Simulate 3 new photos arriving, and Reset prototype between participants.
 | `app.py` | Interface and screens |
 | `engine.py` | Search, answers, commands, deadline detection, face data |
 | `study.py` | Evaluation kit: tasks, questionnaires, scoring, CSV logging |
-| `analyze.py` | Phase 3 numbers from the CSVs (success, time, SEQ, SUS, TLX, paired tests) |
 | `editor.py` | Photo editing |
 | `styles.py` | All CSS, including the Liquid Glass design system |
 | `manifest.csv` | Photo metadata: `description`, in-image text, `tags` (what is visible), `wearing` (clothing and colours), `taken` dates. Every new photo needs a row with tags, or it cannot be found |
@@ -90,9 +89,4 @@ Simulate 3 new photos arriving, and Reset prototype between participants.
 | `RESEARCH_PLAN.md` | Research questions, study design, analysis plan and paper outline |
 | `study_data/` | Created when you run a study session (ignored by git) |
 
-## Share the study as a link
-1. Put the project in a public GitHub repository (leave out `Old Files/`, `images.zip`, `study_data/`).
-2. On share.streamlit.io choose **Create app**, pick the repo, main file `app.py`, then Deploy.
-3. Your link is `https://<your-app>.streamlit.app/?study=1`. Send that exact link; participants land straight in the study on their phone.
-4. **Keep the data safe.** A hosted app's files can be wiped when it restarts. Create a Google Sheet, paste `google_sheet_logger.gs` into Extensions > Apps Script, deploy it as a web app (access: Anyone), then in Streamlit **Settings > Secrets** add `STUDY_WEBHOOK = "<web app URL>"`. Every row is then also written to the sheet (tabs: participants, tasks, questionnaires, final).
-5. One participant can be inside the study at a time (the sample library is shared); others see a "try again in a few minutes" message. A free Streamlit app goes to sleep when unused and wakes in about 30 seconds on the first visit.
+**Select squares.** Photos, every collection and Clean up show a square on each photo. Tick one or more: *Delete selected*, *Move to* (Photos and collections) or *Remove from Cleanup bin* (Clean up), *Clear*, *Delete all*.
