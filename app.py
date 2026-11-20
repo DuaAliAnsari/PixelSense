@@ -28,7 +28,6 @@ from PIL import Image, ImageOps
 import analytics as AN
 import editor as ED
 import study as ST
-import uuid
 import engine as E
 from engine import AUTO, CAT_ORDER, HELD, R, df
 from styles import CSS
@@ -114,79 +113,24 @@ def fresh_state():
         view="welcome", back="chat", query="", rfilter="All", hfilter="All", sel=None, cur_coll=None, cur_person=None,
         override={}, extra_cats=[], deleted_cats=set(), excluded_cats={"Sensitive"}, excluded_imgs=set(), removed=set(), arrived=set(),
         names=dict(E.PRESET_NAMES), hidden_people=set(), notp=set(), faces_on=None, fav=set(), kept=set(), cur_mem=None, copies=[], copy_seq=0, llm_on=False,
-        history=[], searches=[], done=set(), study=None, signed_in=True, opened=set(), manual=[], manual_seq=0, analytics_on=False, events=[], snack=None, scroll=False, menu=False, plus=False, chat=[], res=None,
+        bl_view="photos", bl_albums={}, bl_back="photos", history=[], searches=[], done=set(), study=None, opened=set(), manual=[], manual_seq=0, analytics_on=False, events=[], snack=None, scroll=False, menu=False, plus=False, chat=[], res=None,
     )
 
 
 if "boot" not in S:
     S.update(fresh_state())
     S.boot = True
-    if st.query_params.get("study"):      # participants open the app with ?study=1 and land straight in the study
-        S.view = "study"
 E.sync_copies(S.copies)
 E.sync_opened(S.opened)   # keep the library tables in step with this session (edited copies, undo, reset)
 
 
-THUMBS = ROOT / "thumbs_cache"
-THUMB_SIZES = [(320, 240), (360, 270), (160, 120), (120, 90), (96, 72), (240, 180)]
-
-
-def _thumb_bytes(file, w, h):
-    """Thumbnail as JPEG bytes. Sample photos are cached on disk, so a restart or a new visitor does not redo the resizing."""
-    disk = str(file).startswith("images/")
-    path = THUMBS / f"{slug(file)}_{w}x{h}.jpg"
-    if disk:
-        try:
-            if path.exists():
-                return path.read_bytes()
-        except OSError:
-            pass
-    im = Image.open(ROOT / file)
-    try:
-        im.draft("RGB", (w * 2, h * 2))          # decode JPEGs at reduced size: much faster
-    except Exception:
-        pass
-    im = ImageOps.fit(im.convert("RGB"), (w, h), method=Image.LANCZOS)
-    buf = io.BytesIO()
-    im.save(buf, "JPEG", quality=82)
-    data = buf.getvalue()
-    if disk:
-        try:
-            THUMBS.mkdir(exist_ok=True)
-            path.write_bytes(data)
-        except OSError:
-            pass
-    return data
-
-
 @st.cache_data(show_spinner=False)
 def img_uri(file, w, h):
-    return "data:image/jpeg;base64," + base64.b64encode(_thumb_bytes(file, w, h)).decode()
-
-
-@st.cache_resource
-def warm_thumbs():
-    """Build the common thumbnails in the background right after the app starts, so the first visitor is not the one who waits."""
-    import threading
-    from concurrent.futures import ThreadPoolExecutor
-
-    def run():
-        files = [f for f in E.df["file"].tolist() if str(f).startswith("images/")]
-        jobs = [(f, w, h) for (w, h) in THUMB_SIZES for f in files]
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            list(ex.map(lambda a: _safe_thumb(*a), jobs))
-    threading.Thread(target=run, daemon=True).start()
-    return True
-
-
-def _safe_thumb(f, w, h):
-    try:
-        _thumb_bytes(f, w, h)
-    except Exception:
-        pass
-
-
-warm_thumbs()
+    im = Image.open(ROOT / file).convert("RGB")
+    im = ImageOps.fit(im, (w, h), method=Image.LANCZOS)
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=82)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
 @st.cache_data(show_spinner=False)
@@ -319,10 +263,9 @@ def go(view):
 
 def open_image(i):
     S.opened.add(i)
-    study_seen(i)
     S.back = S.view if S.view != "detail" else S.back
     S.sel = i
-    go("cl_detail" if classic() else "detail")
+    go("detail")
 
 
 def open_from_msg(i, query):
@@ -376,7 +319,6 @@ def undo():
 
 
 def remember_search(q):
-    study_tick("searches")
     S.searches = [q] + [x for x in S.searches if x.lower() != q.lower()]
     S.searches = S.searches[:8]
 
@@ -547,20 +489,17 @@ def appbar(title="PixelSense", chat_btn=False, greet=False):
     with st.container(key="appbar"):
         c1, c2, c3 = st.columns([1, 4, 2] if chat_btn else [1, 5, 1])
         with c1:
-            if classic():
-                md('<div style="width:44px"></div>')
-            else:
-                tappable("menu", f'<div class="ibtn pressable">{svg("menu", 22)}</div>', open_menu, label="Open menu")
+            tappable("menu", f'<div class="ibtn pressable">{svg("menu", 22)}</div>', open_menu, label="Open menu")
         with c2:
             if greet:
                 md(f'<div class="ab-title two"><small>{greeting()},</small><b>{esc(USER_NAME)}</b></div>')
             else:
                 md(f'<div class="ab-title">{esc(title)}</div>')
         with c3:
+            if greet:
+                md(f'<img class="me" src="{me_pic_uri()}" alt="{esc(USER_NAME)} account picture">')
             if chat_btn:
                 home_button("chat")
-            else:
-                tappable("acct", f'<img class="me" src="{me_pic_uri()}" alt="{esc(USER_NAME)} account picture">', account_dialog, label="Account")
 
 
 def snack_ui():
@@ -645,8 +584,30 @@ def new_collection_dialog():
             ids = E.answer_find(make_ctx(), sub, allow_count=False).ids if sub.strip() else []
             create_collection(n, [i for i in ids if visible(R[i])])
             notify(f"Collection “{n}” created" + (f" with {len(ids)} photo{'s' if len(ids) != 1 else ''}." if sub.strip() else "."))
-            S.view = "collections"
+            S.cur_coll = n
+            S.view = "collection"        # land inside the new collection, where "Add photos" is
             st.rerun()
+
+
+@st.dialog("Add photos", width="large")
+def add_photos_dialog(name):
+    """Add photos to a collection from inside it (no need to go back and move photos one by one)."""
+    rows = [r for r in visible_rows() if cat_of(r) != name]
+    st.caption("Tick the photos to add. They move out of the collection AI put them in; Undo is always available.")
+    picked = []
+    for k in range(0, len(rows), 4):
+        cols = st.columns(4)
+        for c, r in zip(cols, rows[k:k + 4]):
+            with c:
+                md(f'<img class="att-thumb" style="width:100%;height:auto;aspect-ratio:4/3;flex:none" src="{img_uri(r.file, 200, 150)}" alt="{esc(r.description)}">')
+                if st.checkbox("Select", key=f"ap_{slug(name)}_{r.id}", label_visibility="collapsed", help=r.description):
+                    picked.append(r.id)
+    if st.button(f"Add {len(picked)} photo{'s' if len(picked) != 1 else ''}", type="primary", key="ap_ok", disabled=not picked):
+        create_collection(name, picked)
+        for k in [k for k in S.keys() if str(k).startswith(f"ap_{slug(name)}_")]:
+            S.pop(k, None)
+        notify(f"Added {len(picked)} to “{name}”.")
+        st.rerun()
 
 
 @st.dialog("Move to another collection")
@@ -776,8 +737,8 @@ def selection_bar(scope, rows, where, mode="library"):
                             delete_photos_dialog(picked, scope, len(picked) == len(ids), where)
                 elif kind == "selmove":
                     with st.container(key=f"danger_selmove_{scope}"):
-                        if st.button(f"Add to album ({len(picked)})" if classic() else f"Move to ({len(picked)})", key=f"selmove_{scope}"):
-                            (cl_add_dialog if classic() else move_many_dialog)(picked, scope)
+                        if st.button(f"Move to ({len(picked)})", key=f"selmove_{scope}"):
+                            move_many_dialog(picked, scope)
                 elif kind == "selbin":
                     with st.container(key=f"danger_selbin_{scope}"):
                         if st.button(f"Keep selected ({len(picked)})", key=f"selbin_{scope}"):
@@ -838,9 +799,8 @@ def delete_photos_dialog(ids, scope, everything, where):
     thumbs = "".join(f'<img src="{img_uri(R[i].file, 96, 72)}" alt="" style="width:56px;height:42px;border-radius:8px;object-fit:cover">' for i in ids[:8])
     more = f'<span style="align-self:center;font-size:12.5px;color:#6B6F8C">+{n - 8} more</span>' if n > 8 else ""
     md(f'<div class="info"><p><b>{head}</b></p><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">{thumbs}{more}</div>'
-       + ('<p>They move to Trash. You can restore them from Library, Trash.</p></div>' if classic() else
-          '<p>They leave your library, search, People and collections.</p>'
-          '<p>You can undo right after, or restore them in Settings, Recently removed.</p></div>'))
+       '<p>They leave your library, search, People and collections.</p>'
+       '<p>You can undo right after, or restore them in Settings, Recently removed.</p></div>')
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Cancel", key=f"dp_cancel_{scope}"):
@@ -1030,8 +990,7 @@ def coming_up_ui():
 def intro():
     md('<div class="greet"><h2>What are you looking for?</h2><p>Ask in your own words. I can find photos, answer questions from the text inside them, '
        'group them by person, and make collections. I only use photos the AI is allowed to read.</p></div>')
-    if not S.study:
-        chips("ask", list(HOME_CHIPS), None, ask_chip)
+    chips("ask", list(HOME_CHIPS), None, ask_chip)
 
 
 def open_results(rp):
@@ -1159,8 +1118,7 @@ def home_send():
 def view_home():
     appbar("Home", greet=True)
     st.text_input("Search your library", key="home_q", placeholder="Search your library…", label_visibility="collapsed", on_change=home_send)
-    if not S.study:
-        chips("home", list(HOME_CHIPS), None, ask_chip)
+    chips("home", list(HOME_CHIPS), None, ask_chip)
     snack_ui()
     rows = visible_rows()
     groups = E.cleanup_groups(rows, S.kept)
@@ -1176,11 +1134,6 @@ def view_home():
             with c:
                 tappable(f"st_{k}", f'<div class="stat pressable"><span class="sic">{svg(ic, 22)}</span><div><div class="sn">{n}</div><div class="sl">{lab}</div></div></div>',
                          go, target, label=f"Open {lab}")
-
-    if not S.study:
-        tappable("study_cta", f'<div class="banner pressable"><div class="bic">{svg("sparkle", 26, "#C27A00")}</div><div style="flex:1"><b>Study mode</b>'
-                              f'<small>Take part in the usability study: short tasks, then a few questions.</small></div>{svg("chev", 22, "#C27A00")}</div>',
-                 go, "study", label="Open study mode")
 
     if S.faces_on is None:
         tappable("faces_cta", f'<div class="banner pressable"><div class="bic">{svg("users", 26, "#C27A00")}</div><div style="flex:1"><b>Group photos by person?</b>'
@@ -1463,600 +1416,527 @@ def view_about():
        '<p><b>What it does not cover.</b> A deadline that never became a photo is only caught if you add it (type it, or paste the message). “Done” is your word. In this prototype the AI is simulated with prepared data.</p></div>')
 
 
-# ---- study mode (self-guided: the participant runs the whole session alone, on a phone) ---------------------
-STUDY_CSS = """<style>
-header[data-testid="stHeader"]{display:none!important}
-.st-key-v_study{max-width:540px;margin:0 auto}
-[data-testid="stMainBlockContainer"]:has(.st-key-v_study){max-width:580px!important;padding:28px 20px 48px!important}
-.st-key-v_study .card{background:transparent!important;border:0!important;box-shadow:none!important;backdrop-filter:none!important;padding:0!important;margin:0!important}
-.st-key-v_study .card p{font-size:16px;line-height:1.5;color:#4B4D63;margin:0 0 10px}
-.st-key-v_study .stButton>button,.st-key-v_study .stFormSubmitButton>button{width:100%!important;min-width:0!important;min-height:54px;border-radius:14px;font-size:16px;font-weight:700}
-.st-key-v_study .stButton>button[kind="secondary"]{background:#fff;border:2px solid #4F46C6;color:#4F46C6}
-.sx-h{font-size:30px;font-weight:800;line-height:1.15;color:#1B1D3A;margin:6px 0 14px}
-.sx-t{font-size:30px;font-weight:800;line-height:1.2;color:#1B1D3A;margin:10px 0 14px}
-.sx-p{font-size:16px;line-height:1.5;color:#5A5C73;margin:0 0 14px}
-.sx-s{font-size:14px;color:#6B6D85;margin:6px 0 4px}
-.sx-segs{display:flex;gap:4px;margin:4px 0 8px}
-.sx-segs i{flex:1;height:5px;border-radius:5px;background:#DEE0EE}
-.sx-segs i.on{background:#4F46C6}
-.sx-lbl{font-size:15px;font-weight:700;color:#1B1D3A;margin:14px 0 4px}
-</style>"""
-
-
-@st.cache_resource
-def study_lock():
-    return {"sid": None, "t": 0}
-
-
-def study_gate(release=False):
-    """Only one participant can be inside the study at a time: the prototype's photo library tables are shared by every visitor, so two people
-    at once would disturb each other's edits. The slot frees itself after 10 minutes without activity."""
-    lock = study_lock()
-    me = S.setdefault("sid", uuid.uuid4().hex)
-    now = time.time()
-    if release:
-        if lock["sid"] == me:
-            lock.update(sid=None, t=0)
-        return True
-    if lock["sid"] in (None, me) or now - lock["t"] > 600:
-        lock.update(sid=me, t=now)
-        return True
-    return False
-
-
-def classic():
-    """True while the 'Classic' (Google Photos style) condition of the study is running."""
-    return bool(S.study and S.study.get("running") and S.study["cond"] == "Classic")
-
-
+# ---- study mode (evaluation kit, researcher-facing) ----------------------------------------------------
 def study_tasks():
-    return ST.tasks_for(S.study["cond"], S.study["sets"][S.study["cond"]])
+    return [t for t in ST.TASKS if S.study["cond"] in t[5]]
 
 
-def study_seen(i):
-    """Record that a photo was opened while a task is running (used to detect the right photo being found)."""
-    if S.study and S.study.get("running"):
-        S.study.setdefault("seen", set()).add(i)
-
-
-def task_progress(t):
-    """Returns (success, wrong_actions, hint). The app decides; the participant never says 'done'."""
-    sd, k, tg = S.study, t["kind"], t["targets"]
-    if k == "open":
-        seen = sd.get("seen", set())
-        return bool(seen & tg), len(seen - tg), ""
-    if k == "fav":
-        new = S.fav - sd["fav0"]
-        return bool(new & tg), len(new - tg), ""
-    if k == "delete":
-        new = S.removed - sd["rem0"]
-        return bool(new & tg), len(new - tg), ""
-    if k == "restore":
-        return not (S.removed & tg), 0, ""
-    if k == "crop":
-        for c in S.copies[sd["copies0"]:]:
-            o = c.get("ops") or {}
-            if c["src"] in tg and (tuple(o.get("crop", (0, 0, 0, 0))) != (0, 0, 0, 0) or o.get("aspect", "Original") != "Original"):
-                return True, 0, ""
-        return False, 0, ""
-    if k == "person":
-        return S.view == "person" and S.cur_person in tg, 0, ""
-    if k == "album":
-        names = [n for n in S.extra_cats if n.strip().lower() == t["name"].lower()]
-        return any(sum(v == n for v in S.override.values()) >= 2 for n in names), 0, ""
-    if k == "clean":
-        new = S.removed - sd["rem0"]
-        good = len(new & tg)
-        hint = "Some of the photos you deleted do not match the task." if len(new) >= t["min"] and good < t["min"] else ""
-        return good >= t["min"], len(new - tg), hint
-    if k == "logout":
-        return bool(sd.get("logged_out")), 0, ""
-    return False, 0, ""
-
-
-def begin_task(sd, t):
-    """Fresh starting point for every task, so nothing from the previous task (open chat, recent searches, a signed-out state) helps or gets in the way."""
-    S.signed_in, S.chat, S.query, S.searches, S.res = True, [], "", [], None
-    S.hfilter, S.cur_coll, S.cur_person, S.sel, S.menu, S.plus, S.snack = "All", None, None, None, False, False, None
-    for k in [k for k in S.keys() if str(k).startswith(("sel_", "ed_", "cl_q", "home_q"))]:
-        del S[k]
-    if t["kind"] == "restore":
-        S.removed |= t["targets"]            # the photo was "deleted by mistake" before the task starts
-    sd.update(running=True, t0=time.time(), nav=0, undos=0, searches=0, seen=set(), fav0=set(S.fav), rem0=set(S.removed), copies0=len(S.copies),
-              logged_out=False, hint_for="")
-    S.view = "cl_photos" if sd["cond"] == "Classic" else "home"
-
-
-def finish_task(outcome):
+@st.dialog("Task finished")
+def finish_dialog():
     sd = S.study
     t = study_tasks()[sd["i"]]
-    _, wrong, _ = task_progress(t)
-    sd["pending"] = dict(task=t["id"], task_set=t["task_set"], rq=t["rq"], seconds=round(time.time() - sd["t0"], 1), outcome=outcome, success=int(outcome == "success"),
-                         wrong=wrong, opened=len(sd.get("seen", set())), searches=sd.get("searches", 0), undos=sd.get("undos", 0), nav=sd.get("nav", 0))
-    sd.update(running=False, step="seq")
-    S.signed_in = True
-    S.view = "study"
-    st.rerun()
-
-
-@st.dialog("Give up this task?")
-def giveup_dialog():
-    st.write("That is fine. We will note that this task was too hard and move on.")
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Yes, give up", type="primary", key="gu_yes"):
-            finish_task("gave_up")
-    with c2:
-        if st.button("Keep trying", key="gu_no"):
-            st.rerun()
+    md(f'<div class="info"><p><b>{esc(t[0])} · {esc(t[2])}</b></p><p>Success looks like: {esc(t[4])}</p></div>')
+    success = st.radio("Did the participant succeed?", ["Yes", "Partly", "No or gave up"], key="fd_success", horizontal=True)
+    errors = st.number_input("Errors you observed (wrong taps, wrong results used, going back)", min_value=0, step=1, key="fd_errors")
+    notes = st.text_area("Quotes or observations (think-aloud)", key="fd_notes", height=90)
+    if st.button("Save and continue", type="primary", key="fd_save"):
+        ST.log_task(participant=sd["pid"], condition=sd["cond"], task_id=t[0], rq=t[1], seconds=round(time.time() - sd["t0"], 1), success=success,
+                    errors=int(errors), undos=sd.get("undos", 0), screens_visited=sd.get("nav", 0), notes=notes.replace("\n", " "))
+        sd["logs"].append({"task": t[0], "seconds": round(time.time() - sd["t0"], 1), "success": success})
+        sd["i"] += 1
+        sd["running"] = False
+        S.view = "study"
+        st.rerun()
 
 
 def study_bar():
-    """The task stays pinned at the top (dark bar, task text, Give up) so the participant can always see what they are doing. The app ends the task itself."""
     sd = S.study
-    study_gate()
-    tasks = study_tasks()
-    t = tasks[sd["i"]]
-    ok, _, hint = task_progress(t)
-    if ok:
-        finish_task("success")
-    if hint and sd.get("hint_for") != hint + str(len(S.removed)):
-        sd["hint_for"] = hint + str(len(S.removed))
-        st.toast(hint)
-    md("<style>header[data-testid='stHeader']{display:none!important}"
-       "[data-testid='stMainBlockContainer']{padding-top:150px!important}"
-       "div.st-key-studybar{position:fixed!important;top:0!important;left:0!important;right:0!important;transform:none!important;width:100%!important;max-width:none!important;"
-       "border-radius:0!important;background:#1F1D2B!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;border:0!important;"
-       "padding:12px 16px 14px!important;z-index:1000;display:block!important}"
-       "div.st-key-studybar>div{width:100%!important;flex:none!important}"
-       "div.st-key-studybar [data-testid='stHorizontalBlock']{flex-wrap:nowrap!important;align-items:center!important;gap:12px!important}"
-       "div.st-key-studybar [data-testid='stColumn']{min-width:0!important}"
-       "div.st-key-studybar .sbx span{display:block;color:#C9CAE0;font-size:13px;margin-bottom:2px}"
-       "div.st-key-studybar .sbx b{display:block;color:#fff;font-size:16px;line-height:1.3;font-weight:600}"
-       "div.st-key-studybar .stButton{width:auto!important}"
-       "div.st-key-studybar .stButton>button{background:#fff!important;color:#1F1D2B!important;border:0!important;border-radius:999px!important;min-height:42px;"
-       "width:auto!important;padding:0 20px!important;font-weight:600!important;white-space:nowrap}</style>")
+    n = len(study_tasks())
+    t = study_tasks()[sd["i"]]
+    md("<style>[data-testid='stMainBlockContainer']{padding-top:92px!important}</style>")
     with st.container(key="studybar"):
-        c1, c2 = st.columns([4, 1.5], vertical_alignment="center")
+        md(f'<div class="sb-t"><span>Task {sd["i"] + 1} of {n}</span><b>{esc(t[3])}</b></div>')
+        if st.button("I’m finished", key="sb_done", type="primary"):
+            finish_dialog()
+
+
+# ---- Gallery baseline: modelled on Google Photos ---------------------------------------------------------
+# Photos tab (date-grouped grid) + Collections tab (Pinned, On this device, Albums, People & pets). A photo has a star (Favorites),
+# Edit (Auto / Crop / Adjust / Filters, no prompt), Add to album and Delete (goes to Trash, can be restored). Albums hold references to
+# photos and you add photos from inside the album. Faces are shown as unnamed circles, not as named groups. No assistant, no
+# Needs-attention, no Clean-up, no search-by-meaning.
+def bl_go(view, **kw):
+    study_tick("nav")
+    S.bl_view = view
+    S.update(kw)
+    S.scroll = True
+    st.rerun()
+
+
+def bl_rows():
+    return sorted([r for r in df.itertuples() if arrived_ok(r) and r.id not in S.removed], key=lambda r: (r.taken, r.id), reverse=True)
+
+
+def bl_open(i):
+    S.opened.add(i)
+    back = S.bl_view if S.bl_view not in ("viewer", "editor") else S.get("bl_back", "photos")
+    bl_go("viewer", bl_sel=i, bl_back=back)
+
+
+def bl_tile(r):
+    star = '<span style="position:absolute;left:8px;bottom:4px;color:#fff;font-size:17px;text-shadow:0 1px 3px rgba(0,0,0,.65)">★</span>' if r.id in S.fav else ""
+    return f'<div class="tile pressable"><img src="{img_uri(r.file, 320, 240)}" alt="Photo from {r.taken}">{star}</div>'
+
+
+def bl_grid(rows, prefix):
+    with st.container(key=f"grid6_{prefix}"):
+        for k in range(0, len(rows), 6):
+            cols = st.columns(6)
+            for c, r in zip(cols, rows[k:k + 6]):
+                with c:
+                    tappable(f"{prefix}_{r.id}", bl_tile(r), bl_open, r.id, label=f"Open photo from {r.taken}")
+
+
+def bl_topbar(title, back, key, right=None):
+    with st.container(key=f"topbar_{key}"):
+        c1, c2 = st.columns([1, 6])
         with c1:
-            md(f'<div class="sbx"><span>Task {sd["i"] + 1} of {len(tasks)}</span><b>{esc(t["text"])}</b></div>')
+            if st.button("←", key=f"blback_{key}", help="Back"):
+                bl_go(back)
         with c2:
-            if st.button("Give up", key="sb_giveup"):
-                giveup_dialog()
+            md(f'<div class="tb-title">{esc(title)}</div>')
 
 
-def reset_library():
-    """Fresh sample library for the next part or participant; keeps the study session itself."""
-    keep = S.study
-    for k in [k for k in S.keys() if str(k).startswith(("seq_", "sus_", "tlx_", "ueq_", "trust_", "sel_", "cl_q"))]:
-        del S[k]
-    S.update(fresh_state())
-    S.study = keep
-    S.view = "study"
+def bl_face_uri(pid, px=84):
+    ids = [i for i in E.PERSON_IMAGES.get(pid, []) if i in R and R[i].id not in S.removed and arrived_ok(R[i])]
+    best = max(ids, key=lambda i: E.FACE_OF[(i, pid)][2] * E.FACE_OF[(i, pid)][3], default=None)
+    if best is None:
+        return None
+    x, y, w, h = E.FACE_OF[(best, pid)]
+    return f'<img class="pav" src="{face_uri(R[best].file, x, y, w, h)}" style="width:{px}px;height:{px}px" alt="Unnamed face">'
 
 
-# ---- account (both versions): sign out / sign in -------------------------------------------------------------
-def sign_out():
-    S.signed_in = False
-    if S.study and S.study.get("running"):
-        S.study["logged_out"] = True
-    S.menu = False
-    st.rerun()
+def bl_face_ids(pid):
+    return [i for i in E.PERSON_IMAGES.get(pid, []) if i in R and i not in S.removed and arrived_ok(R[i])]
 
 
-@st.dialog("Account")
-def account_dialog():
-    md(f'<div style="display:flex;gap:14px;align-items:center;margin-bottom:14px"><img class="me" style="position:static" src="{me_pic_uri()}" alt="">'
-       f'<div><b style="font-size:16px">{esc(USER_NAME)}</b><div class="ccount">ayesha.khan@example.com</div></div></div>')
-    if st.button("Sign out", type="primary", key="acct_out"):
-        sign_out()
-
-
-def view_login():
-    md('<div style="max-width:420px;margin:60px auto 0;text-align:center">'
-       f'<div style="font-size:26px;font-weight:800;color:#1B1D3A;margin-bottom:6px">Sign in</div>'
-       '<div class="sub" style="margin:0 0 22px">Choose an account to continue</div></div>')
-    with st.container(key="login_acct"):
-        tappable("login_pick", f'<div class="card crow pressable" style="max-width:420px;margin:0 auto"><img class="me" style="position:static;width:48px;height:48px" src="{me_pic_uri()}" alt="">'
-                               f'<div style="flex:1;min-width:0"><div class="rtitle" style="font-size:15.5px">{esc(USER_NAME)}</div><div class="ccount">ayesha.khan@example.com</div></div>'
-                               f'<div class="chev">{svg("chev", 20)}</div></div>', sign_in, label=f"Continue as {USER_NAME}")
-
-
-def sign_in():
-    S.signed_in = True
-    st.rerun()
-
-
-# ---- Classic condition: a typical gallery app in the style of Google Photos --------------------------------------
-# Photos / Search / Library tabs. Search matches file names only (no reading text in images, no sentences). Albums are made by hand.
-# No assistant, no suggestions, no deadline tracking, no clean-up suggestions, no automatic collections.
-def cl_rows():
-    return [r for r in df.itertuples() if arrived_ok(r) and r.id not in S.removed]
-
-
-def cl_stem(r):
-    return Path(r.file).stem.lower().replace("_", " ")
-
-
-def cl_nav():
-    cur = {"cl_photos": "cl_photos", "cl_search": "cl_search"}.get(S.view, "cl_library")
-    md("<style>div.st-key-clnav{position:fixed;left:0;right:0;bottom:0;z-index:900;background:#fff;border-top:1px solid #E4E6F2;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px))}"
-       "div.st-key-clnav [data-testid='stHorizontalBlock']{flex-wrap:nowrap!important;gap:4px!important}"
-       "div.st-key-clnav [data-testid='stColumn']{min-width:0!important}"
-       "div.st-key-clnav .stButton>button{width:100%!important;border:0!important;background:transparent!important;color:#6B6D85!important;font-size:12.5px!important;min-height:52px;"
-       "flex-direction:column;gap:2px;box-shadow:none!important}"
-       "div.st-key-clnav .stButton>button[kind='primary']{color:#4F46C6!important;font-weight:700!important;background:#EEEBFF!important;border-radius:14px!important}"
-       "[data-testid='stMainBlockContainer']{padding-bottom:110px!important}</style>")
-    with st.container(key="clnav"):
-        cols = st.columns(3)
-        for col, (key, label, icon) in zip(cols, [("cl_photos", "Photos", ":material/photo_library:"), ("cl_search", "Search", ":material/search:"),
-                                                  ("cl_library", "Library", ":material/collections_bookmark:")]):
-            with col:
-                if st.button(label, key=f"clnav_{key}", icon=icon, type="primary" if cur == key else "secondary"):
-                    go(key)
-
-
-def view_cl_photos():
-    appbar("Photos")
-    snack_ui()
-    rows = cl_rows()
-    selection_bar("clphotos", rows, "Photos")
-    groups = {}
-    for r in sorted(rows, key=lambda r: (r.taken, r.id), reverse=True):
-        d = E.taken_date(r)
-        groups.setdefault((d.year, d.month) if d else (0, 0), []).append(r)
-    for (y, mo), items in groups.items():
-        label = date(y, mo, 1).strftime("%B %Y") if y else "Undated"
-        md(f'<div class="monthh"><b>{label}</b><span>{len(items)} photo{"s" if len(items) != 1 else ""}</span></div>')
-        select_grid(items, f"clt{y}{mo}", "clphotos")
-
-
-def cl_search_send():
-    S.cl_last = (S.get("cl_q") or "").strip()
-    study_tick("searches")
-
-
-def view_cl_search():
-    appbar("Search")
-    st.text_input("Search your photos", key="cl_q", placeholder="Search your photos", label_visibility="collapsed", on_change=cl_search_send)
-    q = (S.get("cl_q") or "").strip().lower()
-    if not q:
-        md('<div class="sub">Search by file name or album name.</div>')
-        return
-    toks = q.split()
-    res = [r for r in cl_rows() if all(t in cl_stem(r) + " " + (str(cat_of(r)).lower() if r.id in S.override else "") for t in toks)]
-    md(f'<div class="sub" style="margin-top:0">{len(res)} result{"s" if len(res) != 1 else ""} for “{esc(q)}”</div>')
-    if not res:
-        empty_state("image", "No results", "Try a different word. Search matches file names and album names.")
-        return
-    image_grid(sorted(res, key=lambda r: (r.taken, r.id), reverse=True), "clsr")
-
-
-def cl_row(key, icon, title, sub, target):
-    tappable(key, f'<div class="card crow pressable"><div class="cthumb" style="background:#EEEBFF;color:#5B4FD6">{svg(icon, 24)}</div>'
-                  f'<div style="flex:1;min-width:0"><div class="rtitle" style="font-size:15.5px">{esc(title)}</div><div class="ccount">{esc(sub)}</div></div>'
-                  f'<div class="chev">{svg("chev", 20)}</div></div>', go, target, label=title)
-
-
-def view_cl_library():
-    appbar("Library")
-    snack_ui()
-    favs = [r for r in cl_rows() if r.id in S.fav]
-    cl_row("cl_r_fav", "heart", "Favourites", f"{len(favs)} photo{'s' if len(favs) != 1 else ''}", "cl_favs")
-    cl_row("cl_r_alb", "folder", "Albums", f"{len(S.extra_cats)} album{'s' if len(S.extra_cats) != 1 else ''}", "cl_albums")
-    cl_row("cl_r_ppl", "users", "People", "Photos grouped by face", "people")
-    cl_row("cl_r_trash", "trash", "Trash", f"{len(S.removed)} photo{'s' if len(S.removed) != 1 else ''}", "cl_trash")
-
-
-def view_cl_favs():
-    topbar("Favourites", "cl_library", "clfav")
-    rows = [r for r in cl_rows() if r.id in S.fav]
-    if not rows:
-        empty_state("heart", "No favourites yet", "Tap the heart on a photo to add it here.")
-        return
-    image_grid(sorted(rows, key=lambda r: (r.taken, r.id), reverse=True), "clfv")
-
-
-@st.dialog("New album")
-def cl_new_album_dialog():
-    name = st.text_input("Album name", key="cl_alb_name", placeholder="Album title")
-    if st.button("Create album", type="primary", key="cl_alb_ok"):
-        n = name.strip()
-        if not n:
-            st.warning("Give the album a name first.")
-        elif n.lower() in [a.lower() for a in S.extra_cats]:
-            st.warning("You already have an album with that name.")
-        else:
-            snap()
-            S.extra_cats.append(n)
-            notify(f"Album “{n}” created. Select photos and tap Add to album.")
-            S.view = "cl_albums"
-            st.rerun()
-
-
-@st.dialog("Add to album")
-def cl_add_dialog(ids, scope):
-    n = len(ids)
-    s = "s" if n != 1 else ""
-    md(f'<div class="info"><p><b>Add {n} photo{s} to an album</b></p></div>')
-    opts = list(S.extra_cats)
-    choice = st.radio("Album", opts, index=None, key=f"cladd_{scope}") if opts else None
-    new = st.text_input("Or create a new album", placeholder="Album title", key=f"cladd_new_{scope}")
-    if st.button(f"Add {n} photo{s}", type="primary", key=f"cladd_ok_{scope}"):
-        target = new.strip() or choice
-        if not target:
-            st.warning("Pick an album or type a new name.")
-            return
-        snap()
-        if target not in S.extra_cats:
-            S.extra_cats.append(target)
-        for i in ids:
-            S.override[i] = target
-            S.pop(sel_key(scope, i), None)
-        notify(f"Added {n} photo{s} to “{target}”.")
-        st.rerun()
-
-
-def view_cl_albums():
-    topbar("Albums", "cl_library", "clalb")
-    snack_ui()
-    with st.container(key="sm_new"):
-        if st.button("+ New album", key="cl_new_alb"):
-            cl_new_album_dialog()
-    if not S.extra_cats:
-        empty_state("folder", "No albums yet", "Create an album, then select photos and tap Add to album.")
-        return
-    for n, name in enumerate(S.extra_cats):
-        items = [i for i in S.override if S.override[i] == name and i not in S.removed]
-        thumb = (f'<div class="cthumb"><img src="{img_uri(R[items[0]].file, 160, 120)}" alt=""></div>' if items
-                 else f'<div class="cthumb" style="background:#EEEBFF;color:#5B4FD6">{svg("folder", 24)}</div>')
-        tappable(f"cl_a_{slug(name)}", f'<div class="card crow pressable">{thumb}<div style="flex:1;min-width:0"><div class="rtitle" style="font-size:15.5px">{esc(name)}</div>'
-                                       f'<div class="ccount">{len(items)} item{"s" if len(items) != 1 else ""}</div></div><div class="chev">{svg("chev", 20)}</div></div>',
-                 open_cl_album, name, label=f"Open {name}")
-
-
-def open_cl_album(name):
-    S.cur_coll = name
-    go("cl_album")
-
-
-def view_cl_album():
-    name = S.cur_coll
-    if name not in S.extra_cats:
-        go("cl_albums")
-    topbar(name, "cl_albums", "clalbum")
-    snack_ui()
-    items = [R[i] for i in S.override if S.override[i] == name and i not in S.removed]
-    md(f'<div class="sub" style="margin-top:0">{len(items)} item{"s" if len(items) != 1 else ""}</div>')
-    if items:
-        selection_bar(f"cla_{slug(name)}", items, f"“{name}”")
-        select_grid(items, "clag", f"cla_{slug(name)}")
-    else:
-        empty_state("folder", "This album is empty", "Go to Photos, select photos and tap Add to album.")
-    with st.container(key="danger_delcoll"):
-        if st.button("Delete album", key="cl_alb_del"):
-            delete_collection_dialog(name)
-
-
-def view_cl_trash():
-    topbar("Trash", "cl_library", "cltrash")
-    snack_ui()
-    gone = [R[i] for i in sorted(S.removed, key=lambda x: int(x[3:]) if x[3:].isdigit() else 0)]
-    if not gone:
-        empty_state("trash", "Trash is empty", "Photos you delete stay here until you restore them.")
-        return
-    for r in gone:
-        thumb_row(r, "clrs", "Restore", restore_image)
+def bl_people():
+    ppl = [p for p in E.PERSON_IMAGES if len(bl_face_ids(p)) >= 2]
+    return sorted(ppl, key=lambda p: -len(bl_face_ids(p)))[:12]
 
 
 @st.dialog("Move to trash?")
-def cl_delete_dialog(i):
-    md(thumb_head(R[i], "") + '<div class="info"><p>The photo moves to Trash. You can restore it from Library, Trash.</p></div>')
+def bl_delete_dialog(ids):
+    st.write(f"{len(ids)} photo{'s' if len(ids) != 1 else ''} will move to Trash. You can restore them from Collections, Trash.")
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("Cancel", key=f"cld_cancel_{i}"):
+        if st.button("Cancel", key="bl_del_cancel"):
             st.rerun()
     with c2:
-        if st.button("Move to trash", type="primary", key=f"cld_ok_{i}"):
-            snap()
-            S.removed.add(i)
-            notify("Moved to trash.")
-            S.view = S.back if S.back in CLASSIC_VIEWS else "cl_photos"
+        if st.button("Move to trash", type="primary", key="bl_del_ok"):
+            S.removed.update(ids)
+            for i in ids:
+                S.pop(f"blsel_{i}", None)
+            notify(f"Moved {len(ids)} to trash.", False)
+            if S.bl_view in ("viewer", "editor"):
+                S.bl_view = S.get("bl_back", "photos")
             st.rerun()
 
 
-def view_cl_detail():
-    if S.sel is None or S.sel not in R or S.sel in S.removed:
-        go("cl_photos")
-    r = R[S.sel]
-    topbar("Photo", S.back if S.back in CLASSIC_VIEWS | {"person", "people"} else "cl_photos", "cldet")
-    snack_ui()
-    d = E.taken_date(r)
-    heart = f'<span class="heart">{svg("heart", 20, "#D6455D", 2, "#D6455D")}</span>' if r.id in S.fav else ""
-    md(f'<div class="hero-img"><img src="{img_uri(r.file, 720, 540)}" alt="Photo">{heart}</div>'
-       f'<div class="dtitle" style="font-size:15px">{esc(Path(r.file).name)}</div>'
-       + (f'<div class="ccount" style="margin-top:4px">{d.strftime("%d %b %Y")}</div>' if d else ""))
-    md('<div style="height:70px"></div>')
-    with st.container(key="actionbar"):
-        c0, ce, c1, c2 = st.columns([1, 2, 2, 2])
-        with c0:
-            with st.container(key="favbtn_on" if r.id in S.fav else "favbtn_off"):
-                if st.button("♥" if r.id in S.fav else "♡", key="cld_fav", help="Favourite"):
-                    snap()
-                    S.fav.symmetric_difference_update({r.id})
-                    notify("Added to favourites." if r.id in S.fav else "Removed from favourites.")
-                    st.rerun()
-        with ce:
-            if st.button("✎ Edit", key="cld_edit"):
-                open_editor(r.id)
-        with c1:
-            if st.button("Add to album", type="primary", key="cld_album"):
-                cl_add_dialog([r.id], "cldet")
-        with c2:
-            if st.button("Delete", key="cld_del"):
-                cl_delete_dialog(r.id)
+def bl_picker(prefix, rows):
+    picked = []
+    for k in range(0, len(rows), 4):
+        cols = st.columns(4)
+        for c, r in zip(cols, rows[k:k + 4]):
+            with c:
+                md(f'<img class="att-thumb" style="width:100%;height:auto;aspect-ratio:4/3;flex:none" src="{img_uri(r.file, 200, 150)}" alt="Photo from {r.taken}">')
+                if st.checkbox("Select", key=f"{prefix}_{r.id}", label_visibility="collapsed"):
+                    picked.append(r.id)
+    return picked
 
 
-CLASSIC_VIEWS = {"cl_photos", "cl_search", "cl_library", "cl_favs", "cl_albums", "cl_album", "cl_trash", "cl_detail"}
-CLASSIC_OK = CLASSIC_VIEWS | {"edit", "people", "person"}
-
-
-# ---- study screens (participant-facing) ---------------------------------------------------------------------------
-def view_study():
-    sd = S.study
-    if sd and sd.get("running"):
-        S.view = "cl_photos" if sd["cond"] == "Classic" else "home"
-        st.rerun()
-    md(STUDY_CSS)
-    if not sd:
-        study_welcome()
-    else:
-        study_gate()
-        {"intro": study_intro, "seq": study_seq, "survey": study_survey, "break": study_break, "final": study_final, "done": study_done}[sd["step"]]()
-
-
-def study_welcome():
-    n_tasks = len(ST.tasks_for("PixelSense", "A")) * 2
-    md('<div class="sx-h">Usability study</div>'
-       f'<div class="sx-p">You will complete {n_tasks} short tasks in two versions of a photo app. After each task there is one quick question. '
-       'There are no right or wrong answers: we are testing the app, not you.</div>')
-    default = st.query_params.get("pid") or ST.next_pid()
-    md('<div class="sx-lbl">Participant code</div>')
-    pid = st.text_input("Participant code", value=default, key="st_pid", label_visibility="collapsed").strip()
-    md('<div class="sx-s">Use a new code for each participant.</div>')
-    saved = ST.load_progress(pid) if pid else None
-    if saved and saved.get("step") not in (None, "done"):
-        label = f"Resume at task {saved['i'] + 1}" if saved["step"] == "intro" else "Resume study"
-        if st.button(label, key="st_resume"):
-            if not study_gate():
-                st.warning("Another participant is using the app right now. Please try again in a few minutes.")
-            else:
-                S.study = dict(saved, running=False, nav=0, undos=0)
-                reset_library()
-                st.rerun()
-    md('<div class="sx-lbl">About you</div>')
-    age = st.selectbox("Your age range", ST.AGE_RANGES, index=None, placeholder="Your age range", key="st_age", label_visibility="collapsed")
-    kept = st.selectbox("Photos on your phone", ST.PHOTO_COUNTS, index=None, placeholder="About how many photos are on your phone?", key="st_kept", label_visibility="collapsed")
-    freq = st.selectbox("How often you search or clean up", ST.SEARCH_FREQ, index=None, placeholder="How often do you search for photos or clean up?", key="st_freq", label_visibility="collapsed")
-    md(f'<div class="sx-s">{esc(ST.CONSENT)}</div>')
-    ok = st.checkbox("I have read this and agree to take part.", key="st_consent")
-    if st.button("Begin study", type="primary", key="st_begin", disabled=not (ok and pid and age and kept and freq)):
-        if not study_gate():
-            st.warning("Another participant is using the app right now. Please try again in a few minutes.")
+@st.dialog("Create album", width="large")
+def bl_album_dialog():
+    name = st.text_input("Album title", placeholder="Add a title", key="bl_new_name")
+    st.caption("Pick photos now, or create the album empty and add photos from inside it later.")
+    picked = bl_picker("blnew", bl_rows())
+    if st.button(f"Create album ({len(picked)} selected)", type="primary", key="bl_new_ok"):
+        n = name.strip()
+        if not n:
+            st.warning("Add a title first.")
+        elif n in S.bl_albums:
+            st.warning("You already have an album with that title.")
         else:
-            order = ST.order_for(pid)
-            ST.log_participant(participant=pid, order=" > ".join(order), task_sets=" | ".join(f"{k}:{v}" for k, v in ST.sets_for(pid).items()),
-                               age_range=age, photos_kept=kept, search_freq=freq)
-            S.study = dict(step="intro", pid=pid, order=order, sets=ST.sets_for(pid), part=0, cond=order[0], i=0, running=False, nav=0, undos=0)
-            ST.save_progress(S.study)
-            reset_library()
+            S.bl_albums[n] = list(picked)
+            for k in [k for k in S.keys() if str(k).startswith("blnew_")]:
+                del S[k]
+            S.pop("bl_new_name", None)
+            bl_go("list", bl_list=("album", n), bl_back="collections")
+
+
+@st.dialog("Add photos", width="large")
+def bl_add_dialog(name):
+    rows = [r for r in bl_rows() if r.id not in S.bl_albums[name]]
+    picked = bl_picker(f"bladd_{slug(name)}", rows)
+    if st.button(f"Add ({len(picked)})", type="primary", key="bl_add_ok", disabled=not picked):
+        S.bl_albums[name] += picked
+        for k in [k for k in S.keys() if str(k).startswith(f"bladd_{slug(name)}_")]:
+            del S[k]
+        notify(f"Added {len(picked)} to “{name}”.", False)
+        st.rerun()
+
+
+@st.dialog("Add to album")
+def bl_to_album_dialog(i):
+    names = list(S.bl_albums)
+    if names:
+        pick = st.radio("Album", names, key=f"bl_pick_{i}")
+        if st.button("Add", type="primary", key=f"bl_pick_ok_{i}"):
+            if i not in S.bl_albums[pick]:
+                S.bl_albums[pick].append(i)
+            notify(f"Added to “{pick}”.", False)
+            st.rerun()
+    new = st.text_input("New album", placeholder="Album title", key=f"bl_pick_new_{i}")
+    if st.button("Create and add", key=f"bl_pick_newok_{i}", disabled=not new.strip() or new.strip() in S.bl_albums):
+        S.bl_albums[new.strip()] = [i]
+        notify(f"Added to “{new.strip()}”.", False)
+        st.rerun()
+
+
+def bl_nav():
+    md("<style>.st-key-bl_nav{position:fixed!important;bottom:18px;left:50%;transform:translateX(-50%);z-index:60;background:#fff;border-radius:32px;"
+       "box-shadow:0 6px 24px rgba(0,0,0,.18);padding:6px 10px;width:auto!important}.st-key-bl_nav [data-testid='stHorizontalBlock']{gap:6px}</style>")
+    with st.container(key="bl_nav"):
+        c1, c2 = st.columns(2)
+        for col, (key, label) in zip((c1, c2), (("photos", "Photos"), ("collections", "Collections"))):
+            with col:
+                if st.button(label, key=f"bl_tab_{key}", type="primary" if S.bl_view == key else "secondary"):
+                    bl_go(key)
+
+
+def bl_photos():
+    c1, c2 = st.columns([6, 1])
+    with c1:
+        md('<div class="h1" style="font-size:28px;font-weight:700;margin-bottom:4px">Photos</div>')
+    with c2:
+        if st.button("＋", key="bl_plus", help="Create new album"):
+            bl_album_dialog()
+    snack_ui()
+    rows = bl_rows()
+    picked = [r.id for r in rows if S.get(f"blsel_{r.id}")]
+    if picked:
+        with st.container(key="sm_bl"):
+            if st.button(f"Delete ({len(picked)})", key="bl_del_sel", type="primary"):
+                bl_delete_dialog(picked)
+    by_day = {}
+    for r in rows:
+        by_day.setdefault(r.taken, []).append(r)
+    for day, items in by_day.items():
+        try:
+            label = datetime.strptime(str(day), "%Y-%m-%d").strftime("%a, %d %b %Y")
+        except ValueError:
+            label = str(day)
+        md(f'<div class="sect"><b style="font-size:15px">{esc(label)}</b></div>')
+        bl_grid(items, f"blp_{slug(str(day))}")
+    md('<div style="height:90px"></div>')
+
+
+def bl_collection_tile(key, icon, title, count, view, **kw):
+    tappable(f"blc_{key}", f'<div class="card pad pressable" style="text-align:center"><div style="font-size:24px">{icon}</div>'
+                           f'<div class="rtitle" style="font-size:14px">{esc(title)}</div><div class="ccount">{count}</div></div>',
+             lambda: bl_go(view, **kw), label=f"Open {title}")
+
+
+def bl_collections():
+    md('<div class="h1" style="font-size:28px;font-weight:700;margin-bottom:4px">Collections</div>')
+    snack_ui()
+    rows = bl_rows()
+    shots = [r for r in rows if r.type == "screenshot"]
+    cam = [r for r in rows if r.type != "screenshot"]
+    favs = [r for r in rows if r.id in S.fav]
+    trash = [i for i in S.removed if i in R]
+    md('<div class="sect"><b style="font-size:16px">Pinned</b></div>')
+    c = st.columns(3)
+    with c[0]:
+        bl_collection_tile("fav", "☆", "Favorites", len(favs), "list", bl_list=("fav", None), bl_back="collections")
+    with c[1]:
+        bl_collection_tile("shots", "▯", "Screenshots", len(shots), "list", bl_list=("shots", None), bl_back="collections")
+    with c[2]:
+        bl_collection_tile("trash", "🗑", "Trash", len(trash), "list", bl_list=("trash", None), bl_back="collections")
+    md('<div class="sect"><b style="font-size:16px">On this device</b></div>')
+    c = st.columns(3)
+    with c[0]:
+        bl_collection_tile("cam", "📷", "Camera", len(cam), "list", bl_list=("camera", None), bl_back="collections")
+    with c[1]:
+        bl_collection_tile("shots2", "▯", "Screenshots", len(shots), "list", bl_list=("shots", None), bl_back="collections")
+    md('<div class="sect"><b style="font-size:16px">Albums</b></div>')
+    names = list(S.bl_albums)
+    cols = st.columns(3)
+    with cols[0]:
+        with st.container(key="sm_bl_newalb"):
+            if st.button("＋ New album", key="bl_new_album"):
+                bl_album_dialog()
+    for k, n in enumerate(names):
+        with cols[(k + 1) % 3]:
+            bl_collection_tile(f"alb_{slug(n)}", "🖼", n, f"{len([i for i in S.bl_albums[n] if i not in S.removed])} items", "list", bl_list=("album", n), bl_back="collections")
+    ppl = bl_people()
+    if ppl:
+        md('<div class="sect"><b style="font-size:16px">People & pets</b></div>')
+        with st.container(key="grid6_blpeople"):
+            cols = st.columns(6)
+            for k, p in enumerate(ppl):
+                with cols[k % 6]:
+                    tappable(f"blf_{p}", f'<div class="ptile pressable">{bl_face_uri(p)}<div class="pname un" style="font-size:12px">Unnamed</div></div>',
+                             lambda p=p: bl_go("list", bl_list=("face", p), bl_back="collections"), label="Open face")
+    md('<div style="height:90px"></div>')
+
+
+def bl_list():
+    kind, arg = S.get("bl_list", ("camera", None))
+    rows = bl_rows()
+    if kind == "fav":
+        title, items = "Favorites", [r for r in rows if r.id in S.fav]
+    elif kind == "shots":
+        title, items = "Screenshots", [r for r in rows if r.type == "screenshot"]
+    elif kind == "camera":
+        title, items = "Camera", [r for r in rows if r.type != "screenshot"]
+    elif kind == "album":
+        title = arg
+        items = [R[i] for i in S.bl_albums.get(arg, []) if i in R and i not in S.removed]
+    elif kind == "face":
+        title, items = "Unnamed", [R[i] for i in bl_face_ids(arg)]
+    else:
+        title, items = "Trash", [R[i] for i in sorted(S.removed) if i in R]
+    bl_topbar(title, S.get("bl_back", "collections"), "list")
+    snack_ui()
+    md(f'<div class="sub" style="margin-top:0">{len(items)} item{"s" if len(items) != 1 else ""}</div>')
+    if kind == "album":
+        if st.button("Add photos", key="bl_album_add", type="primary"):
+            bl_add_dialog(arg)
+    if kind == "trash":
+        if not items:
+            empty_state("folder", "Trash is empty", "Photos you delete show up here so you can restore them.")
+        for r in items:
+            thumb_row(r, "bltr", "Restore", bl_restore)
+        return
+    if not items:
+        empty_state("folder", "Nothing here yet", "Tap Add photos." if kind == "album" else "No photos.")
+    bl_grid(items, f"bll_{kind}")
+    md('<div style="height:90px"></div>')
+
+
+def bl_restore(i):
+    S.removed.discard(i)
+    notify("Photo restored.", False)
+    st.rerun()
+
+
+def bl_toggle_star(i):
+    S.fav.symmetric_difference_update({i})
+
+
+def bl_viewer():
+    r = R.get(S.get("bl_sel"))
+    if r is None or r.id in S.removed:
+        S.bl_view = "photos"
+        return bl_photos()
+    bl_topbar(f"{r.taken}", S.get("bl_back", "photos"), "viewer")
+    snack_ui()
+    md(f'<div class="hero-img"><img src="{img_uri(r.file, 720, 540)}" alt="Photo from {r.taken}"></div>')
+    c = st.columns(4)
+    with c[0]:
+        st.button("★ Favorited" if r.id in S.fav else "☆ Favorite", key="bl_star", on_click=bl_toggle_star, args=(r.id,), type="primary" if r.id in S.fav else "secondary")
+    with c[1]:
+        if st.button("✎ Edit", key="bl_edit"):
+            for k in [k for k in S.keys() if str(k).startswith("bled_")]:
+                del S[k]
+            bl_go("editor")
+    with c[2]:
+        if st.button("Add to album", key="bl_toalb"):
+            bl_to_album_dialog(r.id)
+    with c[3]:
+        if st.button("🗑 Delete", key="bl_delone"):
+            bl_delete_dialog([r.id])
+
+
+def bl_reframe():
+    """Put the crop frame back to the default for the current ratio and rotation, and tell the frame widget to redraw."""
+    S.bled_crop = ed_default_crop(S.bl_sel, S.get("bled_asp", "Original"), S.get("bled_rot", 0))
+    S.bled_nonce = S.get("bled_nonce", 0) + 1
+
+
+def bl_editor():
+    r = R.get(S.get("bl_sel"))
+    if r is None:
+        S.bl_view = "photos"
+        return bl_photos()
+    bl_topbar("Edit", "viewer", "editor")
+    snack_ui()
+    src = Image.open(ROOT / r.file)
+    small = ImageOps.exif_transpose(src).convert("RGB")
+    small.thumbnail((900, 900))
+    S.setdefault("bled_crop", (0.0, 0.0, 0.0, 0.0))
+    S.setdefault("bled_nonce", 0)
+    for k in ("bled_auto", "bled_asp", "bled_rot", "bled_flip", "bled_b", "bled_c", "bled_w", "bled_look"):
+        if k in S:
+            S[k] = S[k]          # keep settings made under a tool that is not on screen right now
+    tool = st.radio("Tool", ["Auto", "Crop", "Adjust", "Filters"], horizontal=True, key="bled_tool", label_visibility="collapsed")
+    auto, asp, rot, flip = S.get("bled_auto", "None"), S.get("bled_asp", "Original"), S.get("bled_rot", 0), S.get("bled_flip", False)
+    b, c, w, look = S.get("bled_b", 0), S.get("bled_c", 0), S.get("bled_w", 0), S.get("bled_look", "None")
+    dyn = auto == "Dynamic"
+    look_ops = dict(brightness=b + (10 if dyn else 0), contrast=c + (20 if dyn else 0), saturation=(20 if dyn else 0), warmth=w,
+                    auto=auto in ("Enhance", "Dynamic"), filter=look)
+    slot = st.empty()
+    if tool == "Auto":
+        st.radio("Suggestions", ["None", "Enhance", "Dynamic"], horizontal=True, key="bled_auto")
+    elif tool == "Crop":
+        st.selectbox("Aspect ratio", list(ED.ASPECTS), key="bled_asp", on_change=bl_reframe)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.radio("Rotate", [0, 90, 180, 270], horizontal=True, format_func=lambda d: f"{d}°", key="bled_rot", on_change=bl_reframe)
+        with c2:
+            st.toggle("Flip", key="bled_flip", on_change=bl_reframe)
+    elif tool == "Adjust":
+        st.slider("Brightness", -50, 50, 0, key="bled_b")
+        st.slider("Contrast", -50, 50, 0, key="bled_c")
+        st.slider("Warmth", -50, 50, 0, key="bled_w")
+    else:
+        st.radio("Filter", ED.FILTERS, horizontal=True, key="bled_look")
+    crop = tuple(S.get("bled_crop", (0.0, 0.0, 0.0, 0.0)))
+    ops = ED.new_ops(**look_ops, aspect="Original", crop=crop, rotate=rot, flip=flip)
+    with slot.container():
+        if tool == "Crop":
+            # draggable frame with corner handles, like the Google Photos crop screen
+            base = ED.apply(small, ED.new_ops(**look_ops, rotate=rot, flip=flip))
+            fw, fh = ed_size(r.id)
+            if rot in (90, 270):
+                fw, fh = fh, fw
+            v = _CROP_FRAME(img=pil_uri(base, 85), crop=list(crop), ratio=ED.ASPECTS.get(asp), nonce=S.bled_nonce, full_w=fw, full_h=fh,
+                            key="bl_cropper", default=None)
+            if isinstance(v, dict) and v.get("nonce") == S.bled_nonce and v.get("crop"):
+                S.bled_crop = tuple(float(x) for x in v["crop"])
+                ops = ED.new_ops(**look_ops, aspect="Original", crop=S.bled_crop, rotate=rot, flip=flip)
+        else:
+            md(f'<div class="edprev"><img src="{pil_uri(ED.apply(small, ops))}" alt="Preview"></div>')
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Cancel", key="bled_cancel"):
+            bl_go("viewer")
+    with c2:
+        if st.button("Save copy", type="primary", key="bled_save", disabled=ED.is_default(ops)):
+            rec = new_copy_record(r.id, ops)
+            notify("Saved a copy. Your original is untouched.", False)
+            bl_go("viewer", bl_sel=rec["id"], bl_back="photos")
+
+
+def view_baseline():
+    """The comparison condition: a gallery modelled on Google Photos (see the comment above)."""
+    S.setdefault("bl_view", "photos")
+    S.setdefault("bl_albums", {})
+    {"photos": bl_photos, "collections": bl_collections, "list": bl_list, "viewer": bl_viewer, "editor": bl_editor}.get(S.bl_view, bl_photos)()
+    if S.bl_view in ("photos", "collections"):
+        bl_nav()
+
+
+def view_study():
+    appbar("Study mode")
+    snack_ui()
+    sd = S.study
+    md('<div class="sub" style="margin-top:0;max-width:720px"><b>Researcher screen.</b> One session is one participant in one condition. Run the app twice per participant '
+       '(PixelSense and Gallery baseline) in counterbalanced order. Data is saved to <b>study_data/</b> as you go.</div>')
+    if not sd:
+        study_setup()
+    elif sd["step"] == "tasks":
+        study_tasks_ui()
+    elif sd["step"] == "survey":
+        study_survey()
+    else:
+        study_done()
+
+
+def study_setup():
+    md(f'<div class="card pad glass info"><p><b>Information and consent</b></p><p>{esc(ST.CONSENT)}</p></div>')
+    pid = st.text_input("Participant number", key="st_pid", placeholder="P01")
+    if pid.strip():
+        st.caption(f"Counterbalanced order: {pid.strip()} starts with {ST.counterbalance(pid.strip())}.")
+    cond = st.radio("Condition for this session", ST.CONDITIONS, key="st_cond", horizontal=True)
+    ok = st.checkbox("The participant has read the information above and agrees to take part.", key="st_consent")
+    with st.container(key="sm_stb"):
+        if st.button("Begin session", type="primary", key="st_begin", disabled=not (pid.strip() and ok)):
+            S.study = dict(step="tasks", pid=pid.strip(), cond=cond, i=0, running=False, logs=[], nav=0, undos=0)
             st.rerun()
 
 
-def study_intro():
+def study_tasks_ui():
     sd = S.study
     tasks = study_tasks()
-    t = tasks[sd["i"]]
-    segs = "".join(f'<i class="{"on" if k <= sd["i"] else ""}"></i>' for k in range(len(tasks)))
-    about = ("This version has an assistant: you can ask it for things, and it finds photos, bills and deadlines for you." if sd["cond"] == "PixelSense"
-             else "This version works like a typical photo app such as Google Photos, with Photos, Search and Library tabs. Search matches file names.")
-    md(f'<div class="sx-segs">{segs}</div><div class="sx-s">Part {sd["part"] + 1} of 2 · Task {sd["i"] + 1} of {len(tasks)}</div>')
-    if sd["i"] == 0:
-        md(f'<div class="sx-p" style="margin-top:12px"><b>{esc(about)}</b> The photos are samples, not yours.</div>')
-    md(f'<div class="sx-t">{esc(t["text"])}</div>'
-       '<div class="sx-p">The timer starts when you tap Start. If you can’t finish, tap “Give up” at the top of the screen.</div>')
-    if st.button("Start task", type="primary", key="st_start"):
-        begin_task(sd, t)
-        st.rerun()
-
-
-def study_seq():
-    sd = S.study
-    p = sd["pending"]
-    msg = "Nice, that one is done." if p["success"] else "No problem, we have noted that one was too hard."
-    md(f'<div class="sx-p"><b>{msg}</b></div>')
-    seq = st.radio("Overall, how easy or difficult was that task?", [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"seq_{sd['cond']}_{p['task']}")
-    st.caption("1 = very difficult, 7 = very easy")
-    if st.button("Next", type="primary", key="seq_next", disabled=seq is None):
-        ST.log_task(participant=sd["pid"], order=" > ".join(sd["order"]), condition=sd["cond"], task_id=p["task"], task_set=p["task_set"], rq=p["rq"], seconds=p["seconds"],
-                    outcome=p["outcome"], success=p["success"], wrong_actions=p["wrong"], photos_opened=p["opened"], searches=p["searches"], undos=p["undos"],
-                    screens_visited=p["nav"], seq=seq)
-        sd["i"] += 1
-        sd.pop("pending")
-        sd["step"] = "survey" if sd["i"] >= len(study_tasks()) else "intro"
-        ST.save_progress(sd)
-        st.rerun()
+    md(f'<div class="sect"><b>{esc(sd["pid"])} · {esc(sd["cond"])}</b><span>{sd["i"]} of {len(tasks)} tasks done</span></div>')
+    done = {l["task"]: l for l in sd["logs"]}
+    for n, t in enumerate(tasks):
+        d = done.get(t[0])
+        state = f'{d["success"]} · {d["seconds"]} s' if d else ("Next" if n == sd["i"] else "Waiting")
+        md(f'<div class="card pad glass crow" style="margin-bottom:8px"><div style="flex:1"><div class="rtitle">{esc(t[0])} · {esc(t[2])} <span class="pill gray">{esc(t[1])}</span></div>'
+           f'<div class="ccount">Read aloud: “{esc(t[3])}”</div><div class="att-proof">Success: {esc(t[4])}</div></div>{pill(state, "good" if d else "")}</div>')
+    with st.container(key="sm_stb"):
+        if sd["i"] < len(tasks):
+            if st.button(f"Start task {sd['i'] + 1}", type="primary", key="st_start"):
+                sd.update(running=True, t0=time.time(), nav=0, undos=0)
+                S.view = "home" if sd["cond"] == "PixelSense" else "baseline"
+                st.rerun()
+        elif st.button("Continue to questionnaires", type="primary", key="st_to_survey"):
+            sd["step"] = "survey"
+            st.rerun()
+        if st.button("Abort session (keeps data already saved)", key="st_abort"):
+            S.update(fresh_state())
+            S.view = "study"
+            st.rerun()
 
 
 def study_survey():
     sd = S.study
-    c = sd["cond"]
-    md(f'<div class="sx-s" style="margin-top:0">Part {sd["part"] + 1} is finished. A few quick questions about this version. All are required.</div>')
-    with st.form(f"survey_form_{c}"):
-        md('<div class="sx-lbl">About this app</div><div class="sx-s">1 = strongly disagree, 5 = strongly agree.</div>')
-        sus = [st.radio(f"{i + 1}. {q}", [1, 2, 3, 4, 5], index=None, horizontal=True, key=f"sus_{c}_{i}") for i, q in enumerate(ST.SUS_ITEMS)]
-        md('<div class="sx-lbl">How did it feel?</div><div class="sx-s">Move each slider.</div>')
-        tlx = {k: st.slider(f"{name}. {q}", 0, 100, 50, 5, key=f"tlx_{c}_{k}") for k, name, q in ST.TLX_ITEMS}
-        ueq, trust = [None] * 8, [None] * 3
-        if c == "PixelSense":
-            md('<div class="sx-lbl">Your impression</div><div class="sx-s">Pick the point between the two words that fits best (1 = left word, 7 = right word).</div>')
-            ueq = [st.radio(f"{a}  ←→  {b}", [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"ueq_{c}_{i}") for i, (a, b) in enumerate(ST.UEQ_S)]
-            md('<div class="sx-lbl">Trust and control</div><div class="sx-s">1 = strongly disagree, 7 = strongly agree.</div>')
-            trust = [st.radio(q, [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"trust_{c}_{i}") for i, q in enumerate(ST.TRUST_ITEMS)]
+    lab = {1: "1 · Strongly disagree", 5: "5 · Strongly agree"}
+    md('<div class="sub" style="margin-top:0">Hand the screen to the participant. All questions are required.</div>')
+    with st.form("survey_form"):
+        md('<div class="sect"><b>System Usability Scale</b></div>')
+        sus = [st.radio(f"{i + 1}. {q}", [1, 2, 3, 4, 5], index=None, horizontal=True, format_func=lambda v: lab.get(v, str(v)), key=f"sus_{i}") for i, q in enumerate(ST.SUS_ITEMS)]
+        md('<div class="sect"><b>Workload (NASA-TLX)</b></div>')
+        tlx = {k: st.slider(f"{name}. {q}", 0, 100, 50, 5, key=f"tlx_{k}") for k, name, q in ST.TLX_ITEMS}
+        ueq, trust = [None] * len(ST.UEQ_S), [None] * 3
+        if sd["cond"] == "PixelSense":
+            md('<div class="sect"><b>Experience</b></div><div class="sub" style="margin-top:0">Pick the point between the two words that matches your impression.</div>')
+            ueq = [st.radio(f"{a}  ←→  {b}", [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"ueq_{i}") for i, (a, b) in enumerate(ST.UEQ_S)]
+            md('<div class="sect"><b>Trust and control</b></div><div class="sub" style="margin-top:0">1 = strongly disagree, 7 = strongly agree.</div>')
+            trust = [st.radio(q, [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"trust_{i}") for i, q in enumerate(ST.TRUST_ITEMS)]
+        md('<div class="sect"><b>Interview</b></div>')
+        notes = st.text_area("Researcher notes and quotes: what worked, what confused them, would they use it?", key="iv_notes", height=120)
         submitted = st.form_submit_button("Save answers", type="primary")
     if submitted:
         if None in sus or None in ueq or None in trust:
             st.warning("Please answer every question.")
             return
-        row = dict(participant=sd["pid"], condition=c, sus_score=ST.sus_score(sus), tlx_raw=ST.tlx_raw(tlx))
+        row = dict(participant=sd["pid"], condition=sd["cond"], sus_score=ST.sus_score(sus), tlx_raw=ST.tlx_raw(tlx), interview_notes=notes.replace("\n", " "))
         row.update({f"sus_{i + 1}": v for i, v in enumerate(sus)})
         row.update({f"tlx_{k}": v for k, v in tlx.items()})
-        if c == "PixelSense":
+        if sd["cond"] == "PixelSense":
             row.update({f"ueq_{i + 1}": v for i, v in enumerate(ueq)})
-            row["ueq_pragmatic"], row["ueq_hedonic"] = ST.ueq_scores(ueq)
+            row["ueq_hedonic"] = ST.ueq_hedonic(ueq)
             row.update({f"trust_{i + 1}": v for i, v in enumerate(trust)})
         ST.log_questionnaire(**row)
-        sd["step"] = "break" if sd["part"] == 0 else "final"
-        ST.save_progress(sd)
-        st.rerun()
-
-
-def study_break():
-    sd = S.study
-    md('<div class="sx-t" style="font-size:26px">Part 1 done. Thank you.</div>'
-       '<div class="sx-p">Part 2 uses the other version of the app. It looks and works differently, so the same kind of task may feel different. Take a short break if you like.</div>')
-    if st.button("Start part 2", type="primary", key="st_p2"):
-        reset_library()
-        S.study.update(part=1, cond=sd["order"][1], i=0, step="intro")
-        ST.save_progress(S.study)
-        st.rerun()
-
-
-def study_final():
-    sd = S.study
-    pref = st.radio("Which version would you rather use for your own photos?", ["PixelSense (with assistant)", "Classic (Photos, Search, Library)", "No preference"], index=None, key="fin_pref")
-    use = st.radio("Would you use PixelSense’s search and “Coming up” deadlines in real life?", ["Yes", "Maybe", "No"], index=None, horizontal=True, key="fin_use")
-    easy = st.text_area("What worked best?", key="fin_easy", height=80)
-    conf = st.text_area("What was confusing or frustrating?", key="fin_conf", height=80)
-    if st.button("Finish", type="primary", key="fin_go", disabled=not (pref and use)):
-        ST.log_final(participant=sd["pid"], preferred=pref, would_use=use, easiest=easy.replace("\n", " "), most_confusing=conf.replace("\n", " "))
+        sd["scores"] = row
         sd["step"] = "done"
-        ST.save_progress(sd)
-        study_gate(release=True)
         st.rerun()
 
 
 def study_done():
     sd = S.study
-    md(f'<div class="sx-t" style="font-size:26px">All done. Thank you!</div><div class="sx-p">Your participant number was <b>{esc(sd["pid"])}</b>. You can close this page now.</div>')
-    if st.button("Return to start screen", key="st_next"):
-        S.study = None
-        reset_library()
-        S.view = "study"
-        st.rerun()
+    sc = sd["scores"]
+    md(f'<div class="card pad glass info"><p><b>Session saved for {esc(sd["pid"])} · {esc(sd["cond"])}.</b></p>'
+       f'<p>SUS {sc["sus_score"]} (about 68 is average) · NASA-TLX raw {sc["tlx_raw"]}'
+       + (f' · UEQ-S hedonic {sc["ueq_hedonic"]}' if "ueq_hedonic" in sc else "") + '</p></div>')
+    with st.container(key="sm_dl"):
+        c1, c2, _sp = st.columns([1, 1, 1])
+        with c1:
+            st.download_button("Download tasks.csv", ST.read_csv_bytes("tasks.csv"), file_name="tasks.csv", mime="text/csv", key="dl_tasks")
+        with c2:
+            st.download_button("Download questionnaires.csv", ST.read_csv_bytes("questionnaires.csv"), file_name="questionnaires.csv", mime="text/csv", key="dl_q")
+    with st.container(key="sm_stb"):
+        if st.button("Start next session", type="primary", key="st_next"):
+            S.update(fresh_state())
+            S.view = "study"
+            st.rerun()
 
 
-
+# ---- photos timeline ----------------------------------------------------------------------------------
 def view_photos():
     appbar("Photos")
     snack_ui()
@@ -2348,7 +2228,7 @@ def view_edit():
     if S.sel is None or S.sel not in R or not visible(R[S.sel]):
         go("home")
     r = R[S.sel]
-    topbar("Edit photo", "cl_detail" if classic() else "detail", "edit")
+    topbar("Edit photo", "detail", "edit")
     snack_ui()
     src = Image.open(ROOT / r.file)
     small = ImageOps.exif_transpose(src).convert("RGB")
@@ -2389,19 +2269,18 @@ def view_edit():
 
         # ---- right: prompt, then the manual controls ----
         with right:
-            if not classic():          # the Classic version has no edit-by-prompt
-                pc1, pc2 = st.columns([5, 2])
-                with pc1:
-                    st.text_input("Edit with a prompt", key="ed_prompt", on_change=ed_prompt_apply,
-                                  placeholder="e.g. make it brighter and crop to a square")
-                with pc2:
-                    md('<div style="height:28px"></div>')
-                    st.button("Apply", key="ed_prompt_go", type="primary", on_click=ed_prompt_apply)
-                with st.container(key="chips_edit"):
-                    ec = st.columns(len(ED_EXAMPLES))
-                    for col, (label, text) in zip(ec, ED_EXAMPLES):
-                        with col:
-                            st.button(label, key=f"ed_ex_{slug(label)}", on_click=ed_prompt_apply, args=(text,))
+            pc1, pc2 = st.columns([5, 2])
+            with pc1:
+                st.text_input("Edit with a prompt", key="ed_prompt", on_change=ed_prompt_apply,
+                              placeholder="e.g. make it brighter and crop to a square")
+            with pc2:
+                md('<div style="height:28px"></div>')
+                st.button("Apply", key="ed_prompt_go", type="primary", on_click=ed_prompt_apply)
+            with st.container(key="chips_edit"):
+                ec = st.columns(len(ED_EXAMPLES))
+                for col, (label, text) in zip(ec, ED_EXAMPLES):
+                    with col:
+                        st.button(label, key=f"ed_ex_{slug(label)}", on_click=ed_prompt_apply, args=(text,))
             msg = S.get("ed_msg")
             if msg:
                 md(f'<div class="ccount" style="margin:4px 0 8px">{esc(msg[1])}</div>')
@@ -2505,11 +2384,14 @@ def view_collection():
     snack_ui()
     items = [R[i] for i in coll_items(name)]
     md(f'<div class="sub" style="margin-top:0">{len(items)} item{"s" if len(items) != 1 else ""}</div>')
+    with st.container(key="sm_addph"):
+        if st.button("+ Add photos", key="coll_add_photos", type="primary"):
+            add_photos_dialog(name)
     if items:
         selection_bar(f"c_{slug(name)}", items, f"“{name}”")
         select_grid(items, "cg", f"c_{slug(name)}")
     else:
-        empty_state("folder", "This collection is empty", "Open any photo and choose “Move to…”, or ask me to fill it.")
+        empty_state("folder", "This collection is empty", "Tap Add photos to fill it.")
     md('<div style="height:8px"></div>')
     with st.container(key="danger_delcoll"):
         if st.button("Delete collection", key="coll_del"):
@@ -2728,10 +2610,8 @@ def view_settings():
     else:
         md('<div class="sub" style="margin-top:0">Chat works offline with built-in replies and editing commands. For free conversation, set the ANTHROPIC_API_KEY environment variable, run <b>pip install anthropic</b>, then restart the app.</div>')
 
-    if S.study:
-        return
     md('<div class="sect" style="margin-top:16px"><b>Researcher tools</b></div>'
-       '<div class="sub" style="margin-top:0">Download the study data, simulate new photos arriving, or reset everything so the next participant starts fresh. Study mode is on the Home screen.</div>')
+       '<div class="sub" style="margin-top:0">Open study mode to run an evaluation session, simulate new photos arriving, or reset everything so the next participant starts fresh.</div>')
     with st.container(key="sm_arrive"):
         if st.button(f"Simulate {len(HELD)} new photos arriving", key="arrive", disabled=len(S.arrived) == len(HELD)):
             S.arrived = set(HELD)
@@ -2739,9 +2619,9 @@ def view_settings():
             cats = sorted({cat_of(R[i]) for i in live})
             notify(f"{len(HELD)} new photos arrived. " + (f"{len(live)} sorted into {', '.join(cats)}." if live else "AI is paused for them."), False)
             st.rerun()
-    with st.container(key="sm_dl"):
-        for _f in ("participants", "tasks", "questionnaires", "final"):
-            st.download_button(f"Download {_f}.csv", ST.read_csv_bytes(f"{_f}.csv"), file_name=f"{_f}.csv", mime="text/csv", key=f"dl_{_f}")
+    with st.container(key="sm_study"):
+        if st.button("Open study mode", key="open_study"):
+            go("study")
     with st.container(key="danger_reset"):
         if st.button("Reset prototype", key="reset"):
             for k in list(S.keys()):
@@ -2823,26 +2703,19 @@ def drawer():
 
 
 # --------------------------------------------------------------------------- router
-VIEWS = {"study": view_study, "edit": view_edit, "home": view_home, "cleanup": view_cleanup, "memory": view_memory, "welcome": view_welcome, "analysing": view_analysing, "chat": view_chat, "photos": view_photos,
+VIEWS = {"study": view_study, "baseline": view_baseline, "edit": view_edit, "home": view_home, "cleanup": view_cleanup, "memory": view_memory, "welcome": view_welcome, "analysing": view_analysing, "chat": view_chat, "photos": view_photos,
          "results": view_results, "people": view_people, "person": view_person, "detail": view_detail,
-         "collections": view_collections, "collection": view_collection, "settings": view_settings,
-         "cl_photos": view_cl_photos, "cl_search": view_cl_search, "cl_library": view_cl_library, "cl_favs": view_cl_favs, "cl_albums": view_cl_albums,
-         "cl_album": view_cl_album, "cl_trash": view_cl_trash, "cl_detail": view_cl_detail}
-if classic() and S.view not in CLASSIC_OK:
-    S.view = "cl_photos"                 # the Classic condition only has its own tabs, People and the editor
-if not classic() and S.view in CLASSIC_VIEWS:
-    S.view = "home"
-signed_in = S.get("signed_in", True) or S.view == "study"
-with st.container(key=f"v_{S.view}" if signed_in else "v_login"):
-    (VIEWS.get(S.view, view_chat) if signed_in else view_login)()
+         "collections": view_collections, "collection": view_collection, "settings": view_settings}
+if S.study and S.study.get("running") and S.study["cond"] != "PixelSense":
+    S.view = "baseline"                  # the baseline condition is a plain gallery with no assistant and no navigation
+with st.container(key=f"v_{S.view}"):
+    VIEWS.get(S.view, view_chat)()
 if S.study and S.study.get("running"):
     study_bar()
-if classic() and signed_in:
-    cl_nav()
 
-if S.view in ("chat", "results") and signed_in:      # prompt bar lives on the Ask screen only
+if S.view in ("chat", "results"):      # prompt bar lives on the Ask screen only
     composer()
-if S.view != "study" and signed_in and not classic():
+if S.view != "baseline":
     drawer()
 
 if S.scroll:

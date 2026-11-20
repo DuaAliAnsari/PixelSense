@@ -664,7 +664,7 @@ div[data-testid="stDialog"] div[role="dialog"]{background:var(--glass-strong)!im
 .sb-t span{display:block;font-size:var(--t-cap);color:rgba(255,255,255,.65);font-weight:600}
 .sb-t b{display:block;color:#fff;font-size:14px;font-weight:600;line-height:1.3}
 .st-key-studybar .stButton>button{min-height:40px;white-space:nowrap;width:auto;padding:0 18px}
-.st-key-sm_stb .stButton>button,.st-key-sm_bl .stButton>button,.st-key-sm_addd .stButton>button,.st-key-sm_study .stButton>button{width:auto;min-width:180px}
+.st-key-sm_stb .stButton>button,.st-key-sm_bl .stButton>button,.st-key-sm_addph .stButton>button,.st-key-sm_bl_newalb .stButton>button,.st-key-sm_addd .stButton>button,.st-key-sm_study .stButton>button{width:auto;min-width:180px}
 
 /* ---- Why PixelSense ---- */
 .about-hero{padding:var(--sp-6)}
