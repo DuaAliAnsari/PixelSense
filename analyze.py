@@ -1,5 +1,5 @@
 """Phase 3 analysis. Run after data collection:  python analyze.py
-Reads study_data/*.csv (or the CSVs you downloaded from Settings) and prints the numbers the paper needs, in RQ order.
+Reads study_data/*.csv (or the CSVs you downloaded from the study finish screen) and prints the numbers the paper needs, in RQ order.
 scipy is optional: pip install scipy  (for paired tests and the SUS benchmark test)."""
 from pathlib import Path
 import sys
@@ -13,7 +13,8 @@ except ImportError:
 
 tasks = pd.read_csv(D / "tasks.csv")
 qs = pd.read_csv(D / "questionnaires.csv")
-tasks["gave_up"] = (tasks["outcome"] == "gave_up").astype(int)
+tasks["gave_up"] = (tasks["outcome"] == "gave up").astype(int)
+tasks["success"] = tasks["success"].map({"yes": 1, "no": 0}).fillna(tasks["success"]).astype(float)   # the app logs yes / no
 print(f"Participants with task data: {tasks['participant'].nunique()}\n")
 
 print("=== Task performance by condition (F1 = RQ1, C1 = RQ2, S1 = RQ3, E1 = RQ4) ===")
@@ -40,15 +41,13 @@ for tid, t in tasks.groupby("task_id"):
         print(line)
 
 print("\n=== Questionnaires ===")
-print(qs.groupby("condition")[["sus_score", "tlx_raw", "ueq_hedonic"]].agg(["mean", "std", "count"]).round(2).to_string())
-ps = qs[qs.condition == "PixelSense"]["sus_score"].dropna()
-if stats is not None and len(ps) > 2:
-    r = stats.ttest_1samp(ps, 68)
-    print(f"\nH3: SUS PixelSense mean {ps.mean():.1f} vs benchmark 68, one-sample t p={r.pvalue:.3f}")
-tr = qs[qs.condition == "PixelSense"][[c for c in qs.columns if c.startswith("trust_")]]
-if len(tr):
-    print(f"H4: trust items mean (1-7, midpoint 4): {tr.mean().round(2).to_dict()}")
+print(qs.groupby("condition")[["sus_score"]].agg(["mean", "std", "count"]).round(2).to_string())
+print("(5-item short SUS, 0-100; not the standard SUS, so there is no benchmark of 68. Compare the two conditions.)")
+w = qs.pivot_table(index="participant", columns="condition", values="sus_score").dropna()
+if len(w) >= 3 and stats is not None and (w["PixelSense"] - w["Gallery (baseline)"]).abs().sum() > 0:
+    print(f"H3: short SUS PixelSense {w['PixelSense'].mean():.1f} vs Gallery {w['Gallery (baseline)'].mean():.1f} (n={len(w)} pairs), Wilcoxon p={stats.wilcoxon(w['PixelSense'], w['Gallery (baseline)']).pvalue:.3f}")
 if (D / "final.csv").exists():
     f = pd.read_csv(D / "final.csv")
     print("\nPreferred version:\n", f["preferred"].value_counts().to_string())
+    print("\nWould use PixelSense (H4):\n", f["would_use"].value_counts().to_string())
     print("\nFree-text answers for thematic coding saved in final.csv (columns easiest, most_confusing).")

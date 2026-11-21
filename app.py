@@ -1576,6 +1576,7 @@ def bl_act(key, icon, label, fn, *args, active=False, color="#2b2b2b", fill=Fals
 def bl_go(view, **kw):
     study_tick("nav")
     S.bl_view = view
+    S.bl_menu = False
     S.update(kw)
     S.scroll = True
     st.rerun()
@@ -1643,10 +1644,13 @@ BL_CSS = ("<style>.stApp,[data-testid='stAppViewContainer']{background:#fff!impo
           ".bl-alb .nm{font-size:14px;color:#3c4043;margin-top:4px}.bl-alb .ct{font-size:12px;color:#80868b}"
           ".st-key-bl_lpwrap{height:0;overflow:hidden;margin:0!important}.st-key-bl_lpwrap iframe{height:0}"
           "[class*='st-key-blh_'] button,.st-key-bl_ghost button{background:transparent!important;border:0!important;box-shadow:none!important;color:#1b1c1e!important}"
+          "[class*='st-key-blh_'] button:disabled{opacity:.35!important}"
+          ".bl-ptab{text-align:center;padding:12px 0 10px;font-size:17px;color:#80868b;border-bottom:2px solid #e6e8eb}"
+          ".bl-ptab.on{color:#1a8fd1;border-bottom-color:#1a8fd1;font-weight:600}"
           "</style>")
 
 
-def bl_header(left_icon, left_key, left_fn, title, right=None):
+def bl_header(left_icon, left_key, left_fn, title, right=None, sub=None):
     """Light top bar: icon button on the left, title, optional action on the right."""
     c = st.columns([1, 6, 1.4] if right else [1, 7])
     with c[0]:
@@ -1654,7 +1658,8 @@ def bl_header(left_icon, left_key, left_fn, title, right=None):
             if st.button("✕" if left_icon == "close" else "←", key=f"blhb_{left_key}", help="Close" if left_icon == "close" else "Back"):
                 left_fn()
     with c[1]:
-        md(f'<div style="font-size:20px;font-weight:600;color:#1b1c1e;margin-top:6px">{esc(title)}</div>')
+        md(f'<div style="font-size:20px;font-weight:600;color:#1b1c1e;margin-top:{2 if sub else 6}px">{esc(title)}</div>'
+           + (f'<div style="font-size:13px;color:#80868b">{esc(sub)}</div>' if sub else ""))
     if right:
         with c[2]:
             right()
@@ -1691,47 +1696,118 @@ def bl_purge_dialog(ids):
             st.rerun()
 
 
-def bl_picker(prefix, rows):
-    picked = []
-    for k in range(0, len(rows), 4):
-        cols = st.columns(4)
-        for c, r in zip(cols, rows[k:k + 4]):
-            with c:
-                md(f'<img class="att-thumb" style="width:100%;height:auto;aspect-ratio:1/1;flex:none" src="{img_uri(r.file, 200, 200)}" alt="Photo from {r.taken}">')
-                if st.checkbox("Select", key=f"{prefix}_{r.id}", label_visibility="collapsed"):
-                    picked.append(r.id)
-    return picked
-
-
-@st.dialog("New album", width="large")
+@st.dialog("New album")
 def bl_album_dialog():
+    """Step 1 of the stock Gallery flow: name the album. Photos are picked on the next screen."""
     name = st.text_input("Album name", placeholder="Album name", key="bl_new_name")
-    st.caption("Pick photos now, or create it empty and add photos from inside the album later.")
-    picked = bl_picker("blnew", bl_rows())
-    if st.button(f"Create ({len(picked)} selected)", type="primary", key="bl_new_ok"):
-        n = name.strip()
-        if not n:
-            st.warning("Enter a name first.")
-        elif n in S.bl_albums:
-            st.warning("You already have an album with that name.")
-        else:
-            S.bl_albums[n] = list(picked)
-            for k in [k for k in S.keys() if str(k).startswith("blnew_")]:
-                del S[k]
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Cancel", key="bl_new_cancel"):
             S.pop("bl_new_name", None)
-            bl_go("list", bl_list=("album", n), bl_back="albums")
+            st.rerun()
+    with c2:
+        if st.button("Create", type="primary", key="bl_new_ok"):
+            n = name.strip()
+            if not n:
+                st.warning("Enter a name first.")
+            elif n.lower() in {k.lower() for k in S.bl_albums}:
+                st.warning("You already have an album with that name.")
+            else:
+                S.pop("bl_new_name", None)
+                bl_go("pick", bl_pick_album=n, bl_pick_new=True, bl_pick_tab="all", bl_pick_src=None, bl_select=True, bl_picked=set())
 
 
-@st.dialog("Add photos", width="large")
-def bl_add_dialog(name):
-    rows = [r for r in bl_rows() if r.id not in S.bl_albums[name]]
-    picked = bl_picker(f"bladd_{slug(name)}", rows)
-    if st.button(f"Add ({len(picked)})", type="primary", key="bl_add_ok", disabled=not picked):
-        S.bl_albums[name] += picked
-        for k in [k for k in S.keys() if str(k).startswith(f"bladd_{slug(name)}_")]:
-            del S[k]
-        notify(f"Added {len(picked)} to “{name}”.", False)
+@st.dialog("Adding Method")
+def bl_method_dialog(name, ids):
+    """Step 3: after the tick, the Gallery asks whether the photos are copied or moved into the album. Tapping a choice applies it."""
+    how = st.radio("Adding Method", ["Copy", "Move"], index=None, key="bl_method", label_visibility="collapsed")
+    if how:
+        cur = S.bl_albums.setdefault(name, [])
+        for i in ids:
+            if how == "Move":
+                for n, v in S.bl_albums.items():
+                    if n != name and i in v:
+                        v.remove(i)
+            if i not in cur:
+                cur.append(i)
+        S.pop("bl_method", None)
+        S.bl_select, S.bl_picked = False, set()
+        bl_go("list", bl_list=("album", name), bl_back="albums")
+    if st.button("Cancel", key="bl_method_cancel"):
+        S.pop("bl_method", None)
         st.rerun()
+
+
+def bl_src_items(src):
+    kind, arg = src
+    rows = bl_rows()
+    if kind == "camera":
+        return [r for r in rows if r.type != "screenshot"]
+    if kind == "shots":
+        return [r for r in rows if r.type == "screenshot"]
+    return [R[i] for i in S.bl_albums.get(arg, []) if i in R and i not in S.removed]
+
+
+def bl_pick_leave():
+    S.bl_select, S.bl_picked = False, set()
+    if S.get("bl_pick_new"):
+        bl_go("albums")
+    else:
+        bl_go("list")
+
+
+def bl_pick_tab_set(tab):
+    S.bl_pick_tab, S.bl_pick_src = tab, None
+    st.rerun()
+
+
+def bl_pick():
+    """Full-screen photo picker, as in the stock Gallery: X, 'None Selected' / 'N Selected', tick, and All Photos | Albums tabs."""
+    md(BL_CSS)
+    name = S.get("bl_pick_album")
+    S.bl_select = True
+    already = set(S.bl_albums.get(name, []))
+    picked = sorted(set(S.get("bl_picked", set())) - already)
+    c = st.columns([1, 6, 1.2])
+    with c[0]:
+        with st.container(key="blh_pickx"):
+            if st.button("✕", key="bl_pick_x", help="Cancel"):
+                bl_pick_leave()
+    with c[1]:
+        md(f'<div style="font-size:20px;font-weight:600;color:#1b1c1e;margin-top:6px">{f"{len(picked)} Selected" if picked else "None Selected"}</div>')
+    with c[2]:
+        with st.container(key="blh_pickok"):
+            if st.button("✓", key="bl_pick_ok", help="Done", disabled=not picked):
+                bl_method_dialog(name, picked)
+    snack_ui()
+    tab = S.get("bl_pick_tab", "all")
+    t = st.columns(2)
+    for col, key, label in zip(t, ("all", "albums"), ("All Photos", "Albums")):
+        with col:
+            tappable(f"pk_tab_{key}", f'<div class="bl-ptab{" on" if tab == key else ""}">{label}</div>', bl_pick_tab_set, key, label=label)
+    src = S.get("bl_pick_src")
+    if tab == "albums" and src is None:
+        rows = bl_rows()
+        cells = [("cam", "Camera", ("camera", None)), ("shots", "Screenshots", ("shots", None))]
+        cells += [(f"u_{slug(n)}", n, ("album", n)) for n in S.bl_albums if n != name]
+        for k in range(0, len(cells), 3):
+            cols = st.columns(3)
+            for col, (key, title, sr) in zip(cols, cells[k:k + 3]):
+                with col:
+                    items = bl_src_items(sr)
+                    img = f'<img src="{img_uri(items[0].file, 320, 320)}" alt="">' if items else '<div class="ph"></div>'
+                    tappable(f"pka_{key}", f'<div class="bl-alb pressable">{img}<div class="nm">{esc(title)}</div><div class="ct">{len(items)}</div></div>',
+                             lambda sr=sr: (S.update(bl_pick_src=sr), st.rerun()), label=f"Open {title}")
+        return
+    items = [r for r in (bl_src_items(src) if tab == "albums" else bl_rows()) if r.id not in already]
+    by_day = {}
+    for r in items:
+        by_day.setdefault(r.taken, []).append(r)
+    for day, its in by_day.items():
+        md(f'<div class="bl-day bl-pad" style="margin:14px 0 6px">{esc(bl_day_label(day))}</div>')
+        bl_grid(its, f"pk_{tab}_{slug(str(day))}")
+    if not items:
+        empty_state("image", "No photos", "Everything here is already in the album.")
 
 
 @st.dialog("Choose album")
@@ -1928,15 +2004,22 @@ def bl_list():
                 bl_act("tr_delete", "trash", "Delete", lambda: bl_purge_dialog(picked), disabled=not picked)
         return
     S.bl_select = bool(S.get("bl_select")) and S.bl_view == "photos"
-    bl_header("back", "list", lambda: bl_go("albums"), title)
-    snack_ui()
-    md(f'<div class="bl-pad" style="color:#80868b;font-size:13px;margin-bottom:6px">{len(items)} item{"s" if len(items) != 1 else ""}</div>')
+    count = f"{len(items)} Photo{'s' if len(items) != 1 else ''}"
     if kind == "album":
-        with st.container(key="blh_addph"):
-            if st.button("＋ Add photos", key="bl_album_add"):
-                bl_add_dialog(arg)
+        def more():
+            with st.container(key="blh_more"):
+                st.button("⋮", key="bl_more", help="More", on_click=lambda: S.update(bl_menu=not S.get("bl_menu", False)))
+        bl_header("back", "list", lambda: bl_go("albums"), title, right=more, sub=count)
+    else:
+        bl_header("back", "list", lambda: bl_go("albums"), title)
+    snack_ui()
+    if kind == "album" and S.get("bl_menu"):
+        tappable("bl_menu_add", f'<div class="bl-row pressable">{bl_icon("plus", 24, "#3c4043")}<span>Add photos</span></div>',
+                 lambda: bl_go("pick", bl_pick_album=arg, bl_pick_new=False, bl_pick_tab="all", bl_pick_src=None, bl_select=True, bl_picked=set()), label="Add photos")
+    elif kind != "album":
+        md(f'<div class="bl-pad" style="color:#80868b;font-size:13px;margin-bottom:6px">{count}</div>')
     if not items:
-        empty_state("folder", "Nothing here yet", "Tap Add photos." if kind == "album" else "No photos.")
+        empty_state("folder", "Nothing here yet", "Tap ⋮, then Add photos." if kind == "album" else "No photos.")
     bl_grid(items, f"l_{kind}")
     bl_nav()
 
@@ -2127,7 +2210,7 @@ def view_baseline():
     """The comparison condition: a gallery modelled on the phone's stock Gallery app (see the comment above)."""
     S.setdefault("bl_view", "photos")
     S.setdefault("bl_albums", {})
-    {"photos": bl_photos, "albums": bl_albums_view, "list": bl_list, "viewer": bl_viewer, "editor": bl_editor}.get(S.bl_view, bl_photos)()
+    {"photos": bl_photos, "albums": bl_albums_view, "pick": bl_pick, "list": bl_list, "viewer": bl_viewer, "editor": bl_editor}.get(S.bl_view, bl_photos)()
 
 
 def study_clear_answers():
@@ -2200,30 +2283,20 @@ def study_tasks_ui():
 def study_survey():
     sd = S.study
     lab = {1: "1 · Strongly disagree", 5: "5 · Strongly agree"}
-    md(f'<div class="sub" style="margin-top:0">A few questions about the version you just used (version {sd["part"] + 1} of 2). All are required.</div>')
+    md(f'<div class="sub" style="margin-top:0">Five quick questions about the version you just used (version {sd["part"] + 1} of 2). All are required.</div>')
     with st.form("survey_form"):
-        md('<div class="sect"><b>About this version</b></div>')
-        sus = [st.radio(f"{i + 1}. {q}", [1, 2, 3, 4, 5], index=None, horizontal=True, format_func=lambda v: lab.get(v, str(v)), key=f"sus_{i}") for i, q in enumerate(ST.SUS_ITEMS)]
-        md('<div class="sect"><b>Workload</b></div>')
-        tlx = {k: st.slider(f"{name}. {q}", 0, 100, 50, 5, key=f"tlx_{k}") for k, name, q in ST.TLX_ITEMS}
-        ueq, trust = [None] * len(ST.UEQ_S), [None] * 3
-        if sd["cond"] == "PixelSense":
-            md('<div class="sect"><b>Experience</b></div><div class="sub" style="margin-top:0">Pick the point between the two words that matches your impression.</div>')
-            ueq = [st.radio(f"{a}  ←→  {b}", [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"ueq_{i}") for i, (a, b) in enumerate(ST.UEQ_S)]
-            md('<div class="sect"><b>Trust and control</b></div><div class="sub" style="margin-top:0">1 = strongly disagree, 7 = strongly agree.</div>')
-            trust = [st.radio(q, [1, 2, 3, 4, 5, 6, 7], index=None, horizontal=True, key=f"trust_{i}") for i, q in enumerate(ST.TRUST_ITEMS)]
+        sus = [st.radio(f"{i + 1}. {q}", [1, 2, 3, 4, 5], index=None, horizontal=True, format_func=lambda v: lab.get(v, str(v)), key=f"sus_{i}")
+               for i, (q, _) in enumerate(ST.SUS_ITEMS)]
         submitted = st.form_submit_button("Save answers", type="primary")
     if submitted:
-        if None in sus or None in ueq or None in trust:
-            st.warning("Please answer every question.")
+        # Only the five statements exist now, and only they are checked. (The old check also tested the PixelSense-only UEQ/trust lists,
+        # which are never filled in for the Gallery, so the Gallery survey could never be submitted.)
+        missing = [str(i + 1) for i, v in enumerate(sus) if v is None]
+        if missing:
+            st.warning("Please answer question" + ("s " if len(missing) > 1 else " ") + ", ".join(missing) + ".")
             return
-        row = dict(participant=sd["pid"], condition=sd["cond"], sus_score=ST.sus_score(sus), tlx_raw=ST.tlx_raw(tlx))
+        row = dict(participant=sd["pid"], condition=sd["cond"], sus_score=ST.sus_score(sus))
         row.update({f"sus_{i + 1}": v for i, v in enumerate(sus)})
-        row.update({f"tlx_{k}": v for k, v in tlx.items()})
-        if sd["cond"] == "PixelSense":
-            row.update({f"ueq_{i + 1}": v for i, v in enumerate(ueq)})
-            row["ueq_hedonic"] = ST.ueq_hedonic(ueq)
-            row.update({f"trust_{i + 1}": v for i, v in enumerate(trust)})
         ST.log_questionnaire(**row)
         sd["step"] = "between" if sd["part"] == 0 else "final"
         study_clear_answers()

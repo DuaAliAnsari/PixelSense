@@ -102,52 +102,26 @@ PHOTO_COUNTS = ["Under 500", "500 to 2,000", "2,000 to 10,000", "Over 10,000"]
 SEARCH_FREQ = ["Never", "A few times a year", "Monthly", "Weekly or more"]
 
 
+# Short SUS, the same 5 statements for both versions. Original SUS items 4, 8, 9 and 10 (needing technical support, cumbersome, confident,
+# needed to learn a lot) overlapped with each other and with the others, and item 3 ("easy to use") mirrored item 2 ("unnecessarily complex"),
+# so they are dropped. Kept: SUS 1, 2, 5, 6, 7. (text, positively worded?)  Workload (NASA-TLX), UEQ-S and trust items were removed to keep the
+# survey short; the per-task SEQ and the final questions still cover effort and preference.
 SUS_ITEMS = [
-    "I think that I would like to use this system frequently.",
-    "I found the system unnecessarily complex.",
-    "I thought the system was easy to use.",
-    "I think that I would need the support of a technical person to be able to use this system.",
-    "I found the various functions in this system were well integrated.",
-    "I thought there was too much inconsistency in this system.",
-    "I would imagine that most people would learn to use this system very quickly.",
-    "I found the system very cumbersome to use.",
-    "I felt very confident using the system.",
-    "I needed to learn a lot of things before I could get going with this system.",
+    ("I think that I would like to use this system frequently.", True),
+    ("I found the system unnecessarily complex.", False),
+    ("I found the various functions in this system were well integrated.", True),
+    ("I thought there was too much inconsistency in this system.", False),
+    ("I would imagine that most people would learn to use this system very quickly.", True),
 ]
-
-# Short forms, so nothing repeats what SUS or the per-task SEQ already measure.
-# NASA-TLX: only the three subscales that fit a phone photo app (physical demand, hurry and "performance" are dropped: the study is untimed
-# for the participant and success is measured by the app). Raw score = mean of the three.
-TLX_ITEMS = [
-    ("mental", "Mental demand", "How mentally demanding was it? (0 = very low, 100 = very high)"),
-    ("effort", "Effort", "How hard did you have to work? (0 = very low, 100 = very high)"),
-    ("frustration", "Frustration", "How insecure, irritated or stressed were you? (0 = very low, 100 = very high)"),
-]
-
-# UEQ-S, hedonic half only (PixelSense only). The four pragmatic items (complicated/easy, confusing/clear...) repeat SUS, so they are dropped.
-# 1 = left word, 7 = right word.
-UEQ_S = [("boring", "exciting"), ("not interesting", "interesting"), ("conventional", "inventive"), ("usual", "leading edge")]
-
-TRUST_ITEMS = [
-    "I felt in control of what the app did with my photos.",
-    "I understood how the app found its results.",
-    "I would trust this app with my own photo library.",
-]
+SUS_N = len(SUS_ITEMS)
 
 
 def sus_score(answers: list[int]) -> float:
-    """Standard SUS: odd items score-1, even items 5-score, sum x 2.5 (0 to 100). Benchmark average is about 68."""
-    return round(sum((a - 1) if i % 2 == 0 else (5 - a) for i, a in enumerate(answers)) * 2.5, 1)
-
-
-def ueq_hedonic(answers: list[int]) -> float:
-    """Each answer 1..7 becomes -3..+3. Returns the mean (hedonic quality)."""
-    return round(sum(a - 4 for a in answers) / len(answers), 2)
-
-
-def tlx_raw(values: dict) -> float:
-    """Raw (unweighted) NASA-TLX: the mean of the six subscales."""
-    return round(sum(values.values()) / len(values), 1)
+    """Short-SUS, 0 to 100: positive items score-1, negative items 5-score, summed and scaled by 100 / (4 x items).
+    With all 10 items this equals the standard SUS (sum x 2.5). With 5 items it is on the same 0 to 100 range but is NOT the standard SUS,
+    so do not compare it with the usual benchmark of 68; compare PixelSense with the Gallery instead."""
+    pts = sum((a - 1) if SUS_ITEMS[i][1] else (5 - a) for i, a in enumerate(answers))
+    return round(pts * 100 / (4 * len(answers)), 1)
 
 
 def counterbalance(pid: str) -> str:
@@ -158,9 +132,7 @@ def counterbalance(pid: str) -> str:
 
 TASK_FIELDS = ["timestamp", "participant", "order", "condition", "task_id", "task_set", "rq", "seconds", "outcome", "success", "wrong_actions",
                "photos_opened", "searches", "undos", "screens_visited", "seq"]
-Q_FIELDS = (["timestamp", "participant", "condition"] + [f"sus_{i + 1}" for i in range(10)] + ["sus_score"]
-            + [f"tlx_{k}" for k, _, _ in TLX_ITEMS] + ["tlx_raw"] + [f"ueq_{i + 1}" for i in range(len(UEQ_S))] + ["ueq_hedonic"]
-            + [f"trust_{i + 1}" for i in range(3)])
+Q_FIELDS = ["timestamp", "participant", "condition"] + [f"sus_{i + 1}" for i in range(SUS_N)] + ["sus_score"]
 PARTICIPANT_FIELDS = ["timestamp", "participant", "order", "task_sets", "age_range", "photos_kept", "search_freq"]
 FINAL_FIELDS = ["timestamp", "participant", "preferred", "easiest", "most_confusing", "would_use"]
 

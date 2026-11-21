@@ -11,20 +11,20 @@ Because the prototype's AI is simulated (prepared text and face groups), the stu
 | RQ | Question | Task | Measures |
 |---|---|---|---|
 | RQ1 Finding | Does natural-language search help people find photos and facts faster and more accurately than browsing? | F1 | Success, time, errors, screens visited |
-| RQ2 Clean-up | Do grouped suggestions reduce the effort of clearing a library, without regret? | C1 | Time, photos removed, undo count, NASA-TLX |
+| RQ2 Clean-up | Do grouped suggestions reduce the effort of clearing a library, without regret? | C1 | Time, photos removed, undo count, SEQ |
 | RQ3 Surfacing | Does Needs attention help people notice upcoming bills and deadlines? | S1 | Success (items found), time, confidence |
 | RQ4 Editing | Can people make an edit with a chat prompt instead of manual tools? | E1 (PixelSense only) | Success, time, errors |
 | RQ6 Core usability | Can people complete everyday photo-app tasks (trash and restore, albums, view by face, act on a bill, add a deadline) without help? | M1 to M4, P1 | Success, time, wrong actions, SEQ |
-| RQ5 Trust and control | Do the privacy and control features make people feel in control and willing to trust it? | Whole session | SUS, UEQ-S, trust items, interview themes |
+| RQ5 Trust and control | Do the privacy and control features make people feel in control and willing to trust it? | Whole session | Final questions (preference, would use), P2 outcome, interview themes |
 
-**Hypotheses.** H1: PixelSense is faster and more accurate than the baseline for F1 and S1. H2: workload (NASA-TLX) is lower with PixelSense for C1. H3: SUS is above 68 for PixelSense. H4: trust and control items score above the scale midpoint (4 of 7). Drop RQ4 if you do not want to claim anything about editing.
+**Hypotheses.** H1: PixelSense is faster and more accurate than the baseline for F1 and S1. H2: perceived ease (SEQ) is higher with PixelSense for C1. H3: the 5-item short SUS is higher for PixelSense than for the Gallery. H4: most participants say they would use PixelSense (Yes or Maybe) on their own photos. Drop RQ4 if you do not want to claim anything about editing.
 
 ## 3. Design
 - **Within-subjects comparison.** Every participant does the same tasks in two conditions: **PixelSense** and **Gallery (baseline)** (modelled on the phone's stock Gallery app, in a light theme: Photos and Albums tabs, select mode (button or hold a photo) with Copy, Move and Delete, heart Favorite, Edit, Delete and More on an open photo, Recently Deleted with Recover and Delete; no assistant, no Needs-attention, no Clean-up, no search, no faces), Screenshots, Trash, Albums and unnamed faces under People & pets, an editor with Auto / Crop / Adjust / Filters; no assistant, no Needs-attention, no Clean-up, no search by meaning). E1, M3, M4 and P2 are PixelSense only.
 - **Fixed order.** Everyone does the Gallery first, then PixelSense. The Gallery is what people already know, so it is the reference; the cost is that order effects are not cancelled out, which is a limitation to state.
 - **Participants.** About 8 to 15 smartphone users who keep many photos. Record age range, how many photos they keep, and how often they search or clean their library. Exclude anyone who has seen the prototype. Say clearly whether they are students or a wider sample.
 - **Materials.** The sample photos in this prototype (not participants' own photos, which avoids privacy problems).
-- **Procedure (about 20 to 25 minutes per condition).** Consent, short demo of the interface, tasks T1 to T4 (and T5), think-aloud throughout, SUS and NASA-TLX (plus UEQ-S and trust items for PixelSense), then a short interview. Run the second condition after a break.
+- **Procedure (about 20 to 25 minutes per condition).** Consent, short demo of the interface, tasks T1 to T4 (and T5), think-aloud throughout, a 5-question short SUS (same for both versions), then a short interview. Run the second condition after a break.
 
 ## 4. Measures
 | Type | Measure | How it is collected |
@@ -33,10 +33,7 @@ Because the prototype's AI is simulated (prepared text and face groups), the stu
 | Objective | Completion time (seconds) | Automatic, from Start task to success or Give up |
 | Objective | Wrong actions, photos opened, searches | Automatic |
 | Objective | Undo taps, screens visited | Automatic |
-| Subjective | SUS (0 to 100) | Questionnaire step |
-| Subjective | NASA-TLX raw, 3 items: mental demand, effort, frustration (0 to 100) | Questionnaire step |
-| Subjective | UEQ-S hedonic, 4 items (-3 to +3); pragmatic items dropped because SUS covers them | Questionnaire step (PixelSense) |
-| Subjective | Trust and control (3 items, 1 to 7) | Questionnaire step (PixelSense) |
+| Subjective | Short SUS, 5 items (original SUS items 1, 2, 5, 6, 7), scored 0 to 100. Items 3, 4, 8, 9, 10 were dropped because they repeat the others. Not the standard 10-item SUS, so no comparison with the benchmark of 68 | Questionnaire step (both versions) |
 | Subjective | Single Ease Question per task (1 to 7) | After each task |
 | Qualitative | Free-text answers (best, confusing), optional think-aloud subset | final.csv |
 
@@ -51,7 +48,7 @@ One hard-to-find photo (F1), then one task per feature. F1, S1 and C1 have two p
 | E1 Edit by prompt | RQ4 | Black-and-white copy of a beach photo (PixelSense only) | same |
 | E2 Crop | RQ4 | Crop the snow-capped mountains photo and save the copy (both conditions, each app's own editor) | same |
 | M1 Trash and restore | RQ6 | Remove a chocolate cake photo, then restore it (both conditions) | same |
-| M2 Make an album, then add to it | RQ6 | Create "Trip" with one photo, then add a second photo from inside it (both conditions) | same |
+| M2 Make an album, then add to it | RQ6 | Create "Trip" with one photo, then add a second photo to it (both conditions). Gallery follows the stock app: Albums, ＋, name, pick photos (X, None Selected, All Photos / Albums tabs, tick), Adding Method (Copy or Move), then in the album ⋮ > Add photos | same |
 | P1 View by face | RQ6 | Show all photos of Sara (named group in PixelSense; unnamed face in the Gallery) | same |
 | M3 Act on a bill | RQ6 | Mark the electricity bill as paid (PixelSense only) | same |
 | M4 Add a deadline | RQ6 | Add a passport-renewal reminder (PixelSense only) | same |
@@ -64,7 +61,7 @@ Participants run the whole session alone. Nobody has to sit next to them.
 1. Start the app and open it on the phone (same Wi-Fi as the laptop). Put the link in a QR code.
 2. The participant opens **Take part in our usability study** on the Home dashboard, reads the consent text, answers three background questions (age range, photos on phone, how often they search), and taps **Begin**. A participant number (P01, P02, ...) is assigned automatically. There is no choice of version: every participant does both, **Gallery first, then PixelSense**.
 3. **Version 1 and version 2.** For each task: read it, tap **Start task** (timer starts), do it, The app detects when it is done; **Give up** is always available.
-4. After every task: one **Single Ease Question** (1 to 7). After every version: **SUS** and a 3-item **NASA-TLX**, plus 4-item **UEQ-S hedonic** and **trust items** for PixelSense only.
+4. After every task: one **Single Ease Question** (1 to 7). After every version: the **5-question short SUS** (identical for both versions).
 5. At the end: preferred version, easier version, anything confusing, would-use.
 6. The finish screen has a **Researcher: download data** box with the CSVs. Run `python analyze.py`.
 
@@ -73,7 +70,7 @@ Files written to `study_data/` as the participant goes: `participants.csv`, `tas
 **Metrics logged automatically:** completion time, outcome (success or gave_up), failed checks, screens visited, undo taps, SEQ. **Think-aloud** is optional in this version; if you want it, add a short screen-recorded or voice-note subset (3 to 5 participants) and code it with the free-text answers.
 
 ## 6. Analysis plan
-- **Quantitative.** Per task and condition: success rate, median and mean time, errors. Compare conditions with a paired test (paired t-test, or Wilcoxon signed-rank for small or skewed samples). Report effect sizes and confidence intervals, not only p-values. SUS against the 68 benchmark (one-sample test). NASA-TLX and UEQ-S per condition.
+- **Quantitative.** Per task and condition: success rate, median and mean time, errors. Compare conditions with a paired test (paired t-test, or Wilcoxon signed-rank for small or skewed samples). Report effect sizes and confidence intervals, not only p-values. Short SUS per condition, compared PixelSense vs Gallery with a paired test (no benchmark, because 5 items is not the standard SUS).
 - **Qualitative.** Transcribe the think-aloud and interview notes. Code them inductively (open coding, then group into themes such as "finding", "trust", "control", "confusion"). Link each theme to an RQ and keep two or three quotes per theme. A second coder on part of the data would improve reliability.
 - **Linking to RQs.** Present results in RQ order so every finding answers a stated question.
 
@@ -82,6 +79,7 @@ Files written to `study_data/` as the participant goes: `participants.csv`, `tas
 - Small, convenience sample, probably students; limited generalisation.
 - Sample photos, not participants' own libraries, so personal relevance and privacy feelings are only partly captured.
 - The baseline imitates Google Photos' structure and features but is a prototype, not the real app; it omits Google Photos' search and auto-collections such as Documents.
+- The survey is 5 short-SUS items; there is no workload, UEQ or trust scale, so RQ5 rests on the final questions, P2 and interviews.
 - Short exposure; novelty effects; first-use only.
 - Success is checked by simple rules (target photo opened, hearted or removed), so a participant who finds the right photo by luck is marked successful; `photos_opened` and `wrong_actions` show how much guessing happened.
 - Unsupervised sessions: no think-aloud for everyone, and participants may be distracted.
@@ -93,7 +91,7 @@ Files written to `study_data/` as the participant goes: `participants.csv`, `tas
 3. **Related work.** Photo management, conversational interfaces, privacy-preserving AI, usable privacy and control.
 4. **PixelSense design.** Problem analysis and loopholes (see PROBLEM_AND_DESIGN.md), information architecture, Liquid Glass design system, features.
 5. **Method.** Participants, design, tasks, procedure, measures, ethics.
-6. **Results.** By RQ: task performance, SUS, NASA-TLX, UEQ-S, trust, qualitative themes with quotes.
+6. **Results.** By RQ: task performance, short SUS, SEQ, final questions, qualitative themes with quotes.
 7. **Discussion.** What worked and what failed, theoretical and practical contributions, design implications.
 8. **Limitations and future work.** Section 7 above, plus real on-device OCR and face grouping, long-term field study.
 9. **Conclusion.**
