@@ -1020,17 +1020,165 @@ CSS = CSS + r"""
 .st-key-snack [data-testid="stColumn"]:last-child{flex:0 0 auto!important;width:auto!important;min-width:0!important}
 .st-key-snack .stButton{width:auto!important;display:flex;justify-content:flex-end}
 .st-key-snack .stButton>button{width:auto!important;min-width:0!important;padding:0 16px!important}
+"""
 
-/* ---- welcome collage: fixed proportions at every width, faces kept in frame ---- */
-.mos{display:grid!important;grid-template-columns:repeat(3,1fr)!important;grid-template-rows:1fr 1fr!important;gap:10px!important;aspect-ratio:3/2;width:100%}
-.mos .m{position:relative;min-height:0;border-radius:16px!important}
-.mos .m img{position:absolute;inset:0;width:100%!important;height:100%!important;object-fit:cover}
-.mos .a img{object-position:50% 35%}.mos .b img{object-position:50% 22%}
-@media (max-width:640px){.mos{grid-template-rows:1fr 1fr!important}}
+CSS = CSS + r"""
+/* ---------- study mode: the task bar is one flush panel fixed to the very top of the screen (68px); screens start below it ---------- */
+:root{--sbh:68px}
+.st-key-studybar{top:0!important;left:0!important;transform:none!important;width:100vw!important;max-width:100vw!important;height:var(--sbh)!important;
+  box-sizing:border-box!important;border-radius:0!important;padding:0 28px!important;background:#1B1D3A!important;border:none!important;
+  border-bottom:1px solid rgba(255,255,255,.12)!important;box-shadow:0 4px 14px rgba(20,16,70,.25)!important;z-index:1200!important}
+"""
 
-/* ---- hide Streamlit's own chrome (toolbar, GitHub icon, hosting badge, manage-app / profile buttons) and keep content clear of the corner ---- */
-[data-testid="stToolbar"],[data-testid="stAppDeployButton"],[data-testid="stStatusWidget"],[data-testid="stDecoration"],.stAppDeployButton,.stDeployButton,
-[class*="viewerBadge"],[class*="_viewerBadge"],[class*="_profileContainer"],[class*="_terminalButton"],[class*="githubIcon"],[class*="GithubIcon"],
-[data-testid="manage-app-button"],[data-testid="appCreatorAvatar"],a[href*="streamlit.io/cloud"],a[href*="share.streamlit.io"]{display:none!important;visibility:hidden!important}
-[data-testid="stMainBlockContainer"]{padding-bottom:110px!important}
+CSS = CSS + r"""
+/* ---------- Home: stat cards all the same size; collection covers with the name under them ---------- */
+.stat{min-height:96px;box-sizing:border-box}
+.stat .sl{white-space:nowrap}
+@media (max-width:700px){
+  .stat{padding:14px 12px;gap:10px;min-height:92px;height:100%}
+  .stat .sic{flex:0 0 38px;height:38px}
+  .stat .sic svg{width:20px;height:20px}
+  .stat .sn{font-size:24px}
+  .stat .sl{font-size:12px}
+}
+.ctilesq img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:16px;display:block;background:#DCDDEA}
+.ctilesq .cn{font-size:13.5px;font-weight:700;color:#1F2140;margin-top:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctilesq .cc{font-size:12px;color:#6B6F8C;margin-top:1px}
+
+/* ---------- Coming up: three equal summary cells ---------- */
+.att-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px}
+.att-sum .as-c{min-width:0;padding:4px 6px}
+.att-sum .as-k{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#6B6F8C}
+.att-sum .as-n{font-size:24px;font-weight:800;letter-spacing:-.5px;color:#1F2140;line-height:1.15;margin-top:3px;white-space:nowrap}
+.att-sum .as-s{font-size:12.5px;color:#6B6F8C;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.att-sum .as-s.bad{color:#B3261E;font-weight:600}
+@media (max-width:700px){.att-sum{padding:12px 8px;gap:6px}.att-sum .as-n{font-size:19px}.att-sum .as-s{font-size:11.5px}}
+
+@media (max-width:767px){
+
+[class*="st-key-fd_seq"] [role="radiogroup"],[class*="st-key-sus_"] [role="radiogroup"],[class*="st-key-ueq_"] [role="radiogroup"],[class*="st-key-trust_"] [role="radiogroup"]{
+  display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;gap:0!important;justify-content:space-between;width:100%}
+[class*="st-key-fd_seq"] [role="radiogroup"]>label,[class*="st-key-sus_"] [role="radiogroup"]>label,[class*="st-key-ueq_"] [role="radiogroup"]>label,[class*="st-key-trust_"] [role="radiogroup"]>label{
+  flex:1 1 0!important;min-width:0!important;width:auto!important;display:flex!important;flex-direction:column!important;align-items:center!important;gap:3px;
+  background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0!important;padding:6px 0!important;margin:0!important}
+[class*="st-key-fd_seq"] [role="radiogroup"]>label>div:first-child,[class*="st-key-sus_"] [role="radiogroup"]>label>div:first-child,
+[class*="st-key-ueq_"] [role="radiogroup"]>label>div:first-child,[class*="st-key-trust_"] [role="radiogroup"]>label>div:first-child{
+  margin:0!important;width:24px!important;height:24px!important;box-sizing:border-box;background-color:#fff!important;border:2px solid #8A8FB0!important}
+[class*="st-key-fd_seq"] [role="radiogroup"]>label:has(input:checked)>div:first-child,[class*="st-key-sus_"] [role="radiogroup"]>label:has(input:checked)>div:first-child,
+[class*="st-key-ueq_"] [role="radiogroup"]>label:has(input:checked)>div:first-child,[class*="st-key-trust_"] [role="radiogroup"]>label:has(input:checked)>div:first-child{
+  background-color:#5B4FD6!important;border-color:#5B4FD6!important}
+[class*="st-key-fd_seq"] [role="radiogroup"]>label:focus-within>div:first-child,[class*="st-key-sus_"] [role="radiogroup"]>label:focus-within>div:first-child,
+[class*="st-key-ueq_"] [role="radiogroup"]>label:focus-within>div:first-child,[class*="st-key-trust_"] [role="radiogroup"]>label:focus-within>div:first-child{box-shadow:0 0 0 3px rgba(91,79,214,.3)}
+[class*="st-key-fd_seq"] [role="radiogroup"]>label>div:last-child,[class*="st-key-sus_"] [role="radiogroup"]>label>div:last-child,
+[class*="st-key-ueq_"] [role="radiogroup"]>label>div:last-child,[class*="st-key-trust_"] [role="radiogroup"]>label>div:last-child{margin:0!important;padding:0!important;text-align:center}
+[class*="st-key-fd_seq"] [role="radiogroup"]>label p,[class*="st-key-sus_"] [role="radiogroup"]>label p,[class*="st-key-ueq_"] [role="radiogroup"]>label p,[class*="st-key-trust_"] [role="radiogroup"]>label p{
+  font-size:13px!important;font-weight:600;margin:0!important;line-height:1.2}
+}
+.scale-ends{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:#6B6F8C;margin:-4px 2px 14px}
+.scale-ends span{flex:1 1 0;text-align:center}
+.scale-ends span:first-child{text-align:left}.scale-ends span:last-child{text-align:right}
+
+/* ---------- photo editor on a phone: photo on top, a tool bar docked underneath it, options open in the panel ---------- */
+@media (max-width:767px){
+  .st-key-stack_edit [data-testid="stHorizontalBlock"]:not([data-testid="stColumn"] *){flex-wrap:wrap!important}
+  .st-key-stack_edit [data-testid="stHorizontalBlock"]:not([data-testid="stColumn"] *)>[data-testid="stColumn"]:first-child{flex:1 1 100%!important;width:100%!important;min-width:0!important}
+  .st-key-stack_edit [data-testid="stHorizontalBlock"]:not([data-testid="stColumn"] *)>[data-testid="stColumn"]:first-child [data-testid="stRadio"]{display:none}
+  .st-key-stack_edit .edprev img{max-height:calc(60dvh - 150px - var(--sbo,0px));width:auto;max-width:100%;object-fit:contain;display:block;margin:0 auto}
+  .st-key-stack_edit [data-testid="stHorizontalBlock"]:not([data-testid="stColumn"] *)>[data-testid="stColumn"]:last-child{position:fixed!important;left:0;right:0;bottom:0;top:auto;z-index:900;
+    width:100%!important;min-width:0!important;flex:none!important;height:40dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;background:#fff;
+    border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(31,33,64,.18);padding:0 16px calc(8px + env(safe-area-inset-bottom))!important}
+  .st-key-stack_edit [data-testid="stHorizontalBlock"]:not([data-testid="stColumn"] *)>[data-testid="stColumn"]:last-child::before{content:"";display:block;flex:none;width:40px;height:4px;border-radius:4px;background:#D5D7E6;margin:8px auto 0}
+  .st-key-stack_edit [data-testid="stHorizontalBlock"]:not([data-testid="stColumn"] *)>[data-testid="stColumn"]:last-child>[data-testid="stVerticalBlock"]{display:flex;flex-direction:column;gap:.5rem}
+  .st-key-stack_edit [data-testid="stHorizontalBlock"]:not([data-testid="stColumn"] *)>[data-testid="stColumn"]:last-child>[data-testid="stVerticalBlock"]>*{order:3}
+  .st-key-stack_edit .st-key-ed_tabs_box,.st-key-stack_edit [data-testid="stLayoutWrapper"]:has(>.st-key-ed_tabs_box){order:1!important}
+  .st-key-stack_edit .st-key-ed_prompt_box,.st-key-stack_edit [data-testid="stLayoutWrapper"]:has(>.st-key-ed_prompt_box){order:2!important}
+  .st-key-stack_edit .st-key-edact,.st-key-stack_edit [data-testid="stLayoutWrapper"]:has(>.st-key-edact){order:9!important;position:sticky;bottom:0;z-index:6;background:#fff;padding:8px 0 4px}
+  .st-key-ed_tabs_box [data-baseweb="tab-list"]{position:sticky;top:0;z-index:5;background:#fff;padding-top:4px}
+  .st-key-ed_tabs_box [data-baseweb="tab"]{flex:1 1 0;justify-content:center;padding:10px 4px;font-size:13px}
+  .st-key-ed_look [role="radiogroup"]{flex-wrap:nowrap!important;overflow-x:auto;padding-bottom:4px}
+  .st-key-ed_look [role="radiogroup"]>label{flex:0 0 auto!important;width:auto!important}
+}
+"""
+
+CSS = CSS + r"""
+.sect.sect-col{display:block}
+.sect .ssub{display:block;margin-top:2px;font-size:12.5px;color:#6B6F8C;font-weight:600}
+
+@media (max-width:767px){
+/* ---------- study scales: circle with the number under it, one line, fits any screen (overrides the boxed radio style) ---------- */
+[class*="st-key-scale_"] [data-testid="stRadio"] [role="radiogroup"]{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;gap:0!important;
+  width:100%!important;justify-content:space-between!important}
+[class*="st-key-scale_"] [data-testid="stRadio"] label{flex:1 1 0!important;min-width:0!important;width:auto!important;max-width:none!important;display:flex!important;
+  flex-direction:column!important;align-items:center!important;justify-content:flex-start!important;gap:3px!important;background:transparent!important;border:0!important;
+  box-shadow:none!important;border-radius:0!important;padding:4px 0!important;margin:0!important}
+[class*="st-key-scale_"] [data-testid="stRadio"] label:has(input:checked){background:transparent!important;border:0!important}
+[class*="st-key-scale_"] [data-testid="stRadio"] label>div:first-child{margin:0!important;width:24px!important;height:24px!important;min-width:24px!important;box-sizing:border-box!important;
+  background-color:#fff!important;border:2px solid #8A8FB0!important}
+[class*="st-key-scale_"] [data-testid="stRadio"] label:has(input:checked)>div:first-child{background-color:#5B4FD6!important;border-color:#5B4FD6!important}
+[class*="st-key-scale_"] [data-testid="stRadio"] label>div:last-child{margin:0!important;padding:0!important;width:auto!important;text-align:center!important}
+[class*="st-key-scale_"] [data-testid="stRadio"] label p{margin:0!important;font-size:13px!important;font-weight:600!important;line-height:1.2!important;text-align:center!important}
+[class*="st-key-scale_"] [data-testid="stRadio"] label[data-baseweb="radio"] *{white-space:nowrap}
+
+}
+@media (min-width:768px){.scale-ends{justify-content:flex-start;gap:28px}.scale-ends span{flex:0 0 auto;text-align:left!important}}
+
+/* ---------- baseline albums: bigger covers (4 per row on a computer, 3 on a phone); smaller plus ---------- */
+.st-key-bl_albgrid [data-testid="stHorizontalBlock"]{gap:14px!important}
+.bl-alb .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+@media (max-width:700px){
+  .st-key-bl_albgrid [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;gap:12px!important}
+  .st-key-bl_albgrid [data-testid="stColumn"]{flex:0 0 calc(33.333% - 8px)!important;width:calc(33.333% - 8px)!important;min-width:0!important}
+}
+"""
+
+CSS = CSS + r"""
+@media (max-width:767px){
+  .st-key-stack_edit{padding-bottom:42dvh}
+  [class*="st-key-scale_"]{background:#fff;border-radius:16px;padding:14px 14px 6px;box-shadow:0 1px 2px rgba(31,33,64,.04),0 6px 18px rgba(31,33,64,.06);margin-bottom:2px}
+  [class*="st-key-scale_"] [data-testid="stRadio"]>label,[class*="st-key-scale_"] [data-testid="stRadio"] [data-testid="stWidgetLabel"] p{font-size:15px;font-weight:700;color:#1F2140;line-height:1.35}
+  [class*="st-key-scale_"] .scale-ends{margin:2px 0 6px}
+}
+"""
+
+CSS = CSS + r"""
+[data-testid="stFormSubmitButton"] button,[data-testid="stFormSubmitButton"] button *{color:#fff!important}
+"""
+
+CSS = CSS + r"""
+/* Coming up: the whole summary is one tap target */
+.seeall{color:#5B4FD6;font-weight:700}
+.att-sum.pressable{cursor:pointer}
+.att-big .att-pic{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:14px;display:block;background:#E5E6F0;margin-bottom:12px}
+.att-big .att-dl{display:flex;gap:12px;align-items:center}
+.att-big .att-late{color:#B3261E}
+.att-big .att-proof{margin-top:8px}
+
+/* Welcome: three feature cards where the headline was, Get started under them */
+.wel-cards{display:grid;gap:10px;margin:26px 0 22px}
+.wel-cards .feat{flex-direction:row!important;align-items:center!important;gap:14px!important;background:#fff!important;border-radius:18px!important;padding:14px 16px!important;box-shadow:0 1px 2px rgba(31,33,64,.05),0 8px 22px rgba(31,33,64,.08)!important}
+.wel-cards .feat b{font-size:16px!important;color:#1F2140!important;margin:0 0 2px!important}
+.wel-cards .feat small{font-size:13.5px!important;color:#5E627F!important;line-height:1.4}
+@media (max-width:767px){.mos{display:none!important}}
+
+/* phone editor: the prompt box comes first, then the tabs and their settings */
+@media (max-width:767px){
+  .st-key-stack_edit .st-key-ed_prompt_box,.st-key-stack_edit [data-testid="stLayoutWrapper"]:has(>.st-key-ed_prompt_box){order:1!important}
+  .st-key-stack_edit .st-key-ed_tabs_box,.st-key-stack_edit [data-testid="stLayoutWrapper"]:has(>.st-key-ed_tabs_box){order:2!important}
+}
+"""
+
+CSS = CSS + r"""
+/* Welcome: a smaller heading, lilac translucent cards with less padding, so the screen fits without scrolling */
+.st-key-stack_wel .wel-h{font-size:34px!important;line-height:1.14!important;letter-spacing:-.9px!important;margin:18px 0 4px!important;max-width:520px}
+.wel-cards{gap:8px!important;margin:16px 0 16px!important}
+.wel-cards .feat{background:rgba(124,108,240,.12)!important;border:1px solid rgba(91,79,214,.16)!important;box-shadow:none!important;border-radius:14px!important;padding:9px 12px!important;gap:12px!important}
+.wel-cards .feat .fi{flex:0 0 38px!important;width:38px!important;height:38px!important;border-radius:12px!important;background:rgba(255,255,255,.6)!important}
+.wel-cards .feat b{font-size:15px!important;margin:0 0 1px!important}
+.wel-cards .feat small{font-size:13px!important;line-height:1.35!important}
+@media (min-width:768px){.st-key-stack_wel{padding:30px 44px!important}}
+@media (max-width:767px){.st-key-stack_wel .wel-h{font-size:26px!important;margin-top:14px!important}}
+"""
+
+CSS = CSS + r"""
+.att-sum.over{border-left:4px solid #D6455D}
 """
