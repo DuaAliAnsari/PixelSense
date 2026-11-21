@@ -32,18 +32,9 @@ CONSENT = ("You are invited to take part in a short usability study of a photo a
 # or the edited copy was saved. Nothing is typed and nobody has to watch.
 # kind: open = any target photo opened; fav = all targets favourited; clean = 5+ removed and 4+ of them are targets; bw = B&W copy of a beach photo.
 TYPES = [
-    dict(type="F1", rq="RQ1", title="Find by text in a screenshot", kind="open",
-         A=("Find and open the screenshot of the lecture slide about cognitive load theory.", {"img14"}),
-         B=("Find and open the screenshot of a doctor’s contact card.", {"img52"})),
-    dict(type="F2", rq="RQ1", title="Find a bill or receipt", kind="open",
+    dict(type="F1", rq="RQ1", title="Find a bill from a specific year", kind="open",
          A=("Find and open the electricity bill from July 2024.", {"img62"}),
-         B=("Find and open the Imtiaz Supermarket grocery receipt.", {"img08"})),
-    dict(type="F3", rq="RQ1", title="Find by people and scene", kind="open",
-         A=("Find and open a photo of a family sitting together in a field.", {"img25"}),
-         B=("Find and open a photo of a bride with her bridesmaids.", {"img87"})),
-    dict(type="F4", rq="RQ1", title="Find by place", kind="open",
-         A=("Find and open the photo of a beach sunset with a camel.", {"img36"}),
-         B=("Find and open the photo of snow-capped mountains above a green valley.", {"img68"})),
+         B=("Find and open the electricity bill from August 2025.", {"img60"})),
     dict(type="S1", rq="RQ3", title="Surface what matters", kind="fav",
          A=("Mark with a heart (♥) the two bills that are coming due soon.", {"img10", "img11"}),
          B=("Mark with a heart (♥) the assignment deadline and the Tech Fest event that are coming up.", {"img13", "img18"})),
@@ -56,22 +47,21 @@ EDIT_TASK = dict(type="E1", rq="RQ4", title="Edit by prompt", kind="bw",
 BEACH_IDS = {"img22", "img36", "img49"}
 
 # Core photo-app tasks. Most exist in both conditions, because the Gallery baseline is modelled on Google Photos and a real gallery app has
-# them: Favorites (star), Trash and restore, Albums (add photos from inside the album), the editor (Crop), and faces (shown unnamed).
+# them: Favorites (heart), Recently deleted and restore, Albums (add photos from inside the album) and the editor (Crop).
 # Each task is worded per condition (text_base) so it names what that app actually calls things. Tasks with no Google Photos equivalent
-# (edit by prompt, bills, deadlines, AI control) are PixelSense only.
+# (edit by prompt, faces, bills, deadlines, AI control) are PixelSense only.
 CORE = [
     dict(id="M1", rq="RQ6", title="Delete and restore (trash)", kind="restore", targets={"img53", "img54"}, both=True,
          text="Remove one photo of the chocolate cake, then bring it back.",
-         text_base="Delete one photo of the chocolate cake, then restore it from Trash."),
+         text_base="Delete one photo of the chocolate cake, then restore it from Recently deleted."),
     dict(id="E2", rq="RQ4", title="Crop a photo", kind="crop", targets={"img68"}, both=True,
          text="Crop the photo of the snow-capped mountains and save the cropped copy.",
          text_base="Edit the photo of the snow-capped mountains: crop it and save a copy."),
     dict(id="M2", rq="RQ6", title="Make an album, then add to it", kind="album", targets=set(), both=True,
          text="Create a new collection called Trip with one photo in it, then add a second photo to the same collection.",
          text_base="Create a new album called Trip with one photo in it, then add a second photo to the same album."),
-    dict(id="P1", rq="RQ6", title="View photos by face", kind="face", targets={"sara"}, both=True,
-         text="Show all the photos of Sara.",
-         text_base="Sara is the girl hugging her little brother and sister in the park. Show all the photos of her using the faces under People & pets."),
+    dict(id="P1", rq="RQ6", title="View photos by face", kind="face", targets={"sara"}, both=False,
+         text="Show all the photos of Sara."),
     dict(id="M3", rq="RQ6", title="Act on a bill", kind="paid", targets={"img10"}, both=False,
          text="Mark the electricity bill as paid."),
     dict(id="M4", rq="RQ6", title="Add a deadline", kind="deadline", targets=set(), both=False,
@@ -79,9 +69,6 @@ CORE = [
     dict(id="P2", rq="RQ5", title="Stay in control of AI", kind="control", targets=set(), both=False,
          text="Choose any one photo and stop the app’s AI from using it."),
 ]
-# Wording of S1 in the baseline: Google Photos marks favourites with a star, PixelSense uses a heart.
-STAR = {"A": "Mark with a star (★) the two bills that are coming due soon.",
-        "B": "Mark with a star (★) the assignment deadline and the Tech Fest event that are coming up."}
 CLEAN_MIN, CLEAN_MIN_CORRECT = 5, 4
 
 
@@ -97,7 +84,7 @@ def tasks_for(cond: str, set_letter: str) -> list:
     base = cond != "PixelSense"
     out = []
     for t in TYPES:
-        text = STAR[set_letter] if (base and t["type"] == "S1") else t[set_letter][0]
+        text = t[set_letter][0]
         out.append(dict(id=t["type"], task_set=set_letter, rq=t["rq"], title=t["title"], kind=t["kind"], text=text, targets=t[set_letter][1]))
     if not base:
         e = EDIT_TASK
@@ -260,5 +247,5 @@ def next_pid() -> str:
 
 
 def order_for(pid: str) -> list[str]:
-    first = counterbalance(pid)
-    return [first] + [c for c in CONDITIONS if c != first]
+    """Everyone does the Gallery (baseline) first, then PixelSense: the baseline is what people already know, so it is the reference."""
+    return [CONDITIONS[1], CONDITIONS[0]]

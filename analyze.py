@@ -16,7 +16,7 @@ qs = pd.read_csv(D / "questionnaires.csv")
 tasks["gave_up"] = (tasks["outcome"] == "gave_up").astype(int)
 print(f"Participants with task data: {tasks['participant'].nunique()}\n")
 
-print("=== Task performance by condition (F1-F4 = RQ1, C1 = RQ2, S1 = RQ3, E1 = RQ4) ===")
+print("=== Task performance by condition (F1 = RQ1, C1 = RQ2, S1 = RQ3, E1 = RQ4) ===")
 g = tasks.groupby(["task_id", "rq", "condition"])
 summary = g.agg(n=("participant", "nunique"), success_rate=("success", "mean"), gave_up_rate=("gave_up", "mean"),
                 median_s=("seconds", "median"), mean_s=("seconds", "mean"), wrong=("wrong_actions", "mean"), opened=("photos_opened", "mean"), searches=("searches", "mean"),

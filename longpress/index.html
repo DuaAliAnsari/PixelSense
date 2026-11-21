@@ -1,0 +1,48 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:transparent}</style></head>
+<body>
+<script>
+  // Invisible helper: lets a photo tile be selected by holding it (like the phone's Gallery app).
+  // It listens on the parent page, finds the tile under the finger (an element with data-pid) and tells Python which photo was held.
+  function send(type, data) { window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data), "*"); }
+  var P = window.parent;
+  P.__blLPsend = function (pid) { send("streamlit:setComponentValue", { value: { pid: pid, n: Date.now() }, dataType: "json" }); };
+  if (!P.__blLPinstalled) {
+    P.__blLPinstalled = true;
+    var doc = P.document, timer = null, sx = 0, sy = 0;
+    function tileOf(t) {
+      var el = t;
+      while (el && el !== doc.body) {
+        if (el.querySelector && el.querySelector("[data-pid]")) {
+          var inGrid = el.closest("[class*='st-key-blg_']");
+          return inGrid ? el.querySelector("[data-pid]") : null;
+        }
+        el = el.parentElement;
+      }
+      return null;
+    }
+    function clear() { if (timer) { clearTimeout(timer); timer = null; } }
+    doc.addEventListener("pointerdown", function (e) {
+      var tile = tileOf(e.target);
+      if (!tile) return;
+      sx = e.clientX; sy = e.clientY; clear();
+      timer = setTimeout(function () {
+        timer = null;
+        var swallow = function (ev) { ev.stopPropagation(); ev.preventDefault(); };
+        doc.addEventListener("click", swallow, true);
+        setTimeout(function () { doc.removeEventListener("click", swallow, true); }, 700);
+        if (P.navigator.vibrate) { try { P.navigator.vibrate(15); } catch (x) {} }
+        if (P.__blLPsend) P.__blLPsend(tile.getAttribute("data-pid"));
+      }, 450);
+    }, true);
+    doc.addEventListener("pointermove", function (e) { if (timer && (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8)) clear(); }, true);
+    ["pointerup", "pointercancel", "pointerleave"].forEach(function (n) { doc.addEventListener(n, clear, true); });
+    doc.addEventListener("contextmenu", function (e) { if (tileOf(e.target)) e.preventDefault(); }, true);
+  }
+  window.addEventListener("message", function (ev) {
+    if (ev.data && ev.data.type === "streamlit:render") send("streamlit:setFrameHeight", { height: 0 });
+  });
+  send("streamlit:componentReady", { apiVersion: 1 });
+  send("streamlit:setFrameHeight", { height: 0 });
+</script>
+</body></html>

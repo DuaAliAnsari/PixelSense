@@ -24,7 +24,7 @@ Keep `.streamlit/config.toml` next to `app.py` (it locks the light theme).
 - **Photos, People, Collections, Favorites:** timeline by month; face groups (tap a face to see all their photos, name, hide, "Wrong person?" fix, "Often with"); auto-sorted and your own collections; photo details with "Why this result?".
 - **Clean up:** groups photos you may not need: blurry and low-resolution (real sharpness and size measurements), **near-duplicates** (a real image fingerprint, the sharpest of each set stays out of the list), old screenshots, **not opened in over a year**. Review, Keep, or Remove (undoable, originals untouched).
 - **Add a deadline:** deadlines that never became a photo can be typed, or pasted from a message (SMS, email, chat). PixelSense finds the date and amount in the pasted text and shows the words it used.
-- **Study mode (self-guided usability test):** the **Study mode** card on the Home screen, or open the app with `?study=1`. Consent, auto participant code, counterbalanced order, 10 tasks per version with automatic success detection and a Give up button, a Single Ease Question per task, SUS, NASA-TLX, UEQ-S and trust questionnaires. The comparison version, **Classic**, works like Google Photos (Photos, Search, Library). CSV export is in Settings, Researcher tools. See **RESEARCH_PLAN.md**.
+- **Usability study (evaluation kit):** a card on Home starts it. Consent, then every participant does both versions (PixelSense and a Google Photos-style **Gallery**) in counterbalanced order, timed tasks with a task bar, built-in SUS, NASA-TLX, UEQ-S and trust questionnaires, and CSV export. See **RESEARCH_PLAN.md**.
 - **Photo editor:** Adjust, Crop & rotate, Filters, Resolution (2x / 4x), with live preview and *Show original*. Save as a copy to a collection or download. Originals are never changed. Editing is ordinary image processing (Pillow); "improve resolution" is resampling with gentle sharpening, not generative super-resolution.
 - **Edit by chat:** e.g. `Make the wedding photos black and white and save to Eid`, then `make it brighter`.
 - **Smart chat (optional):** turn on in Settings (needs `ANTHROPIC_API_KEY` and `pip install anthropic`). It sends your message and the *text descriptions* of photos the AI may use, never the photos.
@@ -69,7 +69,7 @@ Face groups are opt-in and can be turned off and forgotten. You name people. Eve
 - `make_faces.py` shows how the face data and the extra "shots" of the same people were prepared. **Do not run `make_faces.py` or `make_samples.py` again**: they rewrite `faces.csv` and `manifest.csv` from the original 33 images and would erase the newer photos and faces.
 - To add a photo: put the file in `images/`, add a row to `manifest.csv` (`tags` = what is visible, 10 to 15 words; `wearing` = clothes and colours; `visible_text` = words printed in the image), and add its face boxes to `faces.csv`. Use the same `person_id` for the same person in every photo.
 
-## Researcher tools (Settings, bottom)
+## Researcher tools (Settings, bottom: simulate new photos, reset)
 Simulate 2 new photos arriving, and Reset prototype between participants.
 
 ## Files
