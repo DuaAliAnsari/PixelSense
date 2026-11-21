@@ -242,6 +242,19 @@ def avatar(pid, px=84):
     return f'<img class="pav" src="{face_uri(R[best].file, x, y, w, h)}" style="width:{px}px;height:{px}px" alt="{esc(pname(pid))}">'
 
 
+def task_face(t, px):
+    """A face picture of the person a study task asks about, so the participant knows who to look for."""
+    pid = t.get("person")
+    if not pid:
+        return ""
+    ids = person_images(pid, strict=False)
+    best = max(ids, key=lambda i: E.FACE_OF[(i, pid)][2] * E.FACE_OF[(i, pid)][3], default=None)
+    if best is None:
+        return ""
+    x, y, w, h = E.FACE_OF[(best, pid)]
+    return f'<img class="tface" src="{face_uri(R[best].file, x, y, w, h, 260)}" style="width:{px}px;height:{px}px" alt="{esc(pname(pid))}">'
+
+
 def make_ctx():
     names = {p: pname(p) for p in shown_people()}
     return E.Ctx(rows=visible_rows(), cat_of=cat_of, names=names, people_ids={p: person_images(p) for p in names},
@@ -426,7 +439,8 @@ def ask(q):
         rp = E.llm_reply(ctx, hist, q) or rp
     execute(rp)
     S.chat.append({"role": "ai", "reply": rp})
-    S.view, S.snack, S.menu, S.plus, S.scroll = "chat", None, False, False, "bottom"
+    S.search_open = True                 # the answer and the matching photos show on Home, under the search bar
+    S.view, S.snack, S.menu, S.plus, S.scroll = "home", None, False, False, True
 
 
 def send():
@@ -645,20 +659,20 @@ def move_dialog(i):
         st.rerun()
 
 
-@st.dialog("Remove from PixelSense?")
+@st.dialog("Delete this photo?")
 def remove_dialog(i):
     r = R[i]
     md(thumb_head(r, "") + '<div class="info"><p>It leaves your library, search, People and collections.</p>'
-       '<p><b>Your original file is not touched.</b> You can restore it from the Undo message or from Settings, Recently removed.</p></div>')
+       '<p><b>Your original file is not touched.</b> You can undo right after, or restore it in Settings, Recently removed.</p></div>')
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Cancel", key=f"rm_cancel_{i}"):
             st.rerun()
     with c2:
-        if st.button("Remove", type="primary", key=f"rm_ok_{i}"):
+        if st.button("Delete", type="primary", key=f"rm_ok_{i}"):
             snap()
             S.removed.add(i)
-            notify("Photo removed from PixelSense. Your original is untouched.")
+            notify("Photo deleted. Your original is untouched.")
             S.view = S.back if S.back in ("home", "chat", "photos", "results", "collection", "collections", "person", "people", "cleanup", "memory") else "home"
             st.rerun()
 
@@ -722,7 +736,7 @@ def untick_all(scope, ids):
         S[sel_key(scope, i)] = False
 
 
-def select_grid(rows, prefix, scope, n=6):
+def select_grid(rows, prefix, scope, n=6, opener=open_image, extra=()):
     """Like image_grid, but every photo has a tick square in its top-left corner (state lives in the checkbox itself)."""
     with st.container(key=f"grid{n}_{prefix}"):
         for k in range(0, len(rows), n):
@@ -730,18 +744,23 @@ def select_grid(rows, prefix, scope, n=6):
             for c, r in zip(cols, rows[k:k + n]):
                 with c:
                     with st.container(key=f"selcell_{scope}_{r.id}"):
-                        tappable(f"{prefix}_{r.id}", tile_html(r), open_image, r.id, label=f"Open {r.description}")
+                        tappable(f"{prefix}_{r.id}", tile_html(r), opener, r.id, *extra, label=f"Open {r.description}")
                         st.checkbox(f"Select {r.description}", key=sel_key(scope, r.id), label_visibility="collapsed")
 
 
-def selection_bar(scope, rows, where, mode="library"):
+def selection_bar(scope, rows, where, mode="library", can_select_all=False, only_when_selected=False):
     """The bar above the photos: Delete all ticks every square; Delete selected asks for confirmation.
     Buttons sit at the right end (in line with the 'N photos' label), Clear to the left of Delete all.
     mode "library" (Photos, collections): Delete selected + Move to.  mode "cleanup": Delete selected + Remove from Cleanup bin."""
     ids = [r.id for r in rows]
     picked = [i for i in ids if S.get(sel_key(scope, i))]
     second = ("selbin", None) if mode == "cleanup" else ("selmove", None)
-    show = ([("seldel", None), second, ("selclear", None)] if picked else []) + [("delall", None)]
+    if only_when_selected:      # no buttons until at least one photo is ticked; no Delete all
+        show = [("seldel", None), second, ("selall", None), ("selclear", None)] if picked else []
+        if picked and len(picked) == len(ids):
+            show = [x for x in show if x[0] != "selall"]
+    else:
+        show = ([("seldel", None), second, ("selclear", None)] if picked else []) + ([("selall", None)] if can_select_all and len(picked) < len(ids) else []) + [("delall", None)]
     with st.container(key=f"selbar_{scope}"):
         cols = st.columns([1] + [0.01] * len(show))
         with cols[0]:
@@ -762,6 +781,8 @@ def selection_bar(scope, rows, where, mode="library"):
                             bin_out(picked, scope)
                 elif kind == "selclear":
                     st.button("Clear", key=f"selclear_{scope}", on_click=untick_all, args=(scope, ids))
+                elif kind == "selall":
+                    st.button("Select all", key=f"selall_{scope}", on_click=tick_all, args=(scope, ids))
                 else:
                     st.button("Delete all", key=f"delall_{scope}", on_click=tick_all, args=(scope, ids), icon=":material/delete:", disabled=len(picked) == len(ids))
 
@@ -977,14 +998,30 @@ def view_analysing():
 
 # ---- chat -------------------------------------------------------------------------------------------
 def view_chat():
-    if not S.chat:                       # nothing searched yet: searching starts on Home
-        S.view = "home"
-        st.rerun()
-    appbar("Search results", chat_btn=True)
-    snack_ui()
+    """Search results no longer have a screen of their own: they sit under the search bar on Home (search_results_ui)."""
+    S.view = "home"
+    st.rerun()
+
+
+def clear_search():
+    S.search_open = False
+    S.chat = []
+    S.scroll = True
+    st.rerun()
+
+
+def search_results_ui():
+    """The current question and its answer, directly under the search bar. Earlier ones stay in memory (for "make it brighter") but are not shown."""
     last = len(S.chat) - 1
-    # show only the current question and its answer; earlier ones stay in memory (for "make it brighter") but are not shown
     start = max((i for i, m in enumerate(S.chat) if m["role"] == "user"), default=0)
+    q = S.chat[start]["text"] if S.chat[start]["role"] == "user" else ""
+    c1, c2 = st.columns([3, 2])
+    with c1:
+        md(f'<div class="sect sect-col" style="margin-top:4px"><b>Results</b><span class="ssub">for “{esc(q)}”</span></div>')
+    with c2:
+        with st.container(key="link_clrsearch"):
+            if st.button("✕ Clear search", key="clear_search"):
+                clear_search()
     for idx in range(start, len(S.chat)):
         render_msg(idx, S.chat[idx], idx == last)
 
@@ -1071,7 +1108,8 @@ def render_msg(idx, m, is_last):
                      f'<div class="chev">{svg("chev", 20)}</div></div>', open_from_msg, sid, rp.query, label=f"Open {r.description}")
     grid = [r for r in rows if r.id not in shown_src]
     if grid:
-        image_grid(grid[:6], f"m{idx}", open_from_msg, (rp.query,), n=3)
+        selection_bar(f"res{idx}", grid[:6], "these results", can_select_all=True, only_when_selected=True)
+        select_grid(grid[:6], f"m{idx}", f"res{idx}", 3, open_from_msg, (rp.query,))
         if len(grid) > 6:
             tappable(f"m{idx}_all", f'<div class="more pressable" style="color:#5B4FD6;font-weight:800">See all {len(grid)} photos →</div>',
                      open_results, rp, label="See all photos")
@@ -1080,7 +1118,7 @@ def render_msg(idx, m, is_last):
         md(f'<details class="how"><summary>How I found this</summary><ol>{items}</ol>'
            '<div style="color:#8A8EA8">Answers come from prepared text and descriptions in this prototype, not a live model.</div></details>')
     if rp.chips:
-        chips(f"mc{idx}", rp.chips, None, lambda lab: chat_chip(idx, rp, lab))
+        chips(f"mc{idx}", ["＋ " + c if c == "Save these as a collection" else c for c in rp.chips], None, lambda lab: chat_chip(idx, rp, lab.removeprefix("＋ ")))
     if is_last and getattr(rp, "executed", False) and S.history:
         with st.container(key="plain_mundo"):
             if st.button("↶ Undo", key=f"mundo_{idx}"):
@@ -1149,6 +1187,9 @@ def view_home():
     st.text_input("Ask about your photos", key="home_q", placeholder="Ask about your photos…", label_visibility="collapsed", on_change=home_send)
     chips("home", list(HOME_CHIPS), None, ask_chip)
     snack_ui()
+    if S.get("search_open") and S.chat:      # a search is open: its results replace the dashboard until it is cleared
+        search_results_ui()
+        return
     rows = visible_rows()
     groups = E.cleanup_groups(rows, S.kept)
     n_clean = sum(len(v) for v in groups.values())
@@ -1519,8 +1560,15 @@ def study_check(t):
         return len(gone) >= ST.CLEAN_MIN and len(gone & tg) >= ST.CLEAN_MIN_CORRECT
     if k == "crop":
         return any(c["src"] in tg and (c["ops"].get("aspect", "Original") != "Original" or any(c["ops"].get("crop") or [])) for c in new_copies)
-    if k == "bw":
-        return any(c["src"] in ST.BEACH_IDS and (c["ops"].get("filter", "None") != "None" or c["ops"].get("saturation", 0) <= -80) for c in new_copies)
+    if k == "bw":           # one saved copy that is both cropped and black and white
+        return any(c["src"] in (tg or ST.BEACH_IDS)
+                   and (c["ops"].get("filter", "None") != "None" or c["ops"].get("saturation", 0) <= -80)
+                   and (c["ops"].get("aspect", "Original") != "Original" or any(c["ops"].get("crop") or []))
+                   for c in new_copies)
+    if k == "open3":        # Gallery: three photos of the person opened
+        return len(tg & (S.opened - sd.get("opened0", set()))) >= 3
+    if k == "searchcoll":   # a collection was made from search results
+        return len(S.extra_cats) > sd.get("cats0", 0)
     if k == "album":
         if sd["cond"] == "PixelSense":
             return "Trip" in all_cats() and len(coll_items("Trip")) >= 2
@@ -1543,7 +1591,7 @@ def study_check(t):
 def study_wrong_actions(t):
     """Photos opened, marked or removed that were not what the task asked for."""
     sd, k, tg = S.study, t["kind"], t["targets"]
-    if k == "open":
+    if k in ("open", "open3"):
         return len((S.opened - sd.get("opened0", set())) - tg)
     if k == "fav":
         return len((S.fav - sd.get("fav0", set())) - tg)
@@ -1556,6 +1604,7 @@ def study_end(gave_up):
     """The task is over: stop the clock and ask the one ease question."""
     sd = S.study
     t = study_tasks()[sd["i"]]
+    S.snack = None                       # feedback toasts belong to the task that just ended
     sd.update(running=False, secs=round(time.time() - sd["t0"], 1), outcome="gave up" if gave_up else "finished",
               success="no" if gave_up else "yes", wrong=study_wrong_actions(t), step="seq")
     S.view = "study"
@@ -1578,7 +1627,9 @@ def study_bar():
        ".st-key-v_chat .st-key-appbar,.st-key-v_results .st-key-appbar,"
        ".st-key-v_chat [data-testid='stLayoutWrapper']:has(> .st-key-appbar),.st-key-v_results [data-testid='stLayoutWrapper']:has(> .st-key-appbar){top:var(--sbh)!important}</style>")
     with st.container(key="studybar"):
-        md(f'<div class="sb-t"><span>Task {sd["i"] + 1} of {len(study_tasks())}</span><b>{esc(t["text"])}</b></div>')
+        n_ch = len(t["text"])
+        tier = 0 if n_ch <= 55 else 1 if n_ch <= 85 else 2 if n_ch <= 115 else 3 if n_ch <= 150 else 4     # longer text gets a smaller font so it always fits the bar
+        md(f'<div class="sb-row">{task_face(t, 46)}<div class="sb-t"><span>Task {sd["i"] + 1} of {len(study_tasks())}</span><b class="t{tier}">{esc(t["text"])}</b></div></div>')
         if st.button("Give up", key="sb_giveup"):
             study_end(True)
 
@@ -1598,26 +1649,12 @@ def sus_text(q):
     return q[0] if isinstance(q, (tuple, list)) else q
 
 
-TLX_FALLBACK = [("mental", "Mental demand", "How mentally demanding was it? (0 = very low, 100 = very high)"),
-                ("physical", "Physical demand", "How physically demanding was it? (0 = very low, 100 = very high)"),
-                ("temporal", "Hurry", "How hurried or rushed was the pace? (0 = very low, 100 = very high)"),
-                ("performance", "Performance", "How unsuccessful were you? (0 = perfect, 100 = failure)"),
-                ("effort", "Effort", "How hard did you have to work? (0 = very low, 100 = very high)"),
-                ("frustration", "Frustration", "How stressed or frustrated did you feel? (0 = very low, 100 = very high)")]
-
-
-UEQ_FALLBACK = [("obstructive", "supportive"), ("complicated", "easy"), ("inefficient", "efficient"), ("confusing", "clear"),
-                ("boring", "exciting"), ("not interesting", "interesting"), ("conventional", "inventive"), ("usual", "leading edge")]
-TRUST_FALLBACK = ["I felt in control of what the app did with my photos.", "I understood how the app found its results.",
-                  "I would trust this app with my own photo library."]
-
-
 def ueq_items():
-    return list(getattr(ST, "UEQ_S", None) or UEQ_FALLBACK)
+    return list(getattr(ST, "UEQ_S", None) or [])
 
 
 def trust_items():
-    return list(getattr(ST, "TRUST_ITEMS", None) or TRUST_FALLBACK)
+    return list(getattr(ST, "TRUST_ITEMS", None) or [])
 
 
 def tlx_items():
@@ -1625,7 +1662,7 @@ def tlx_items():
         v = getattr(ST, name, None)
         if v and all(isinstance(x, (tuple, list)) and len(x) == 3 for x in v):
             return list(v)
-    return TLX_FALLBACK                  # study.py without the workload list: use the standard six
+    return []                            # study.py has no workload list: the survey has no workload questions
 
 
 def scale_ends(low, high, mid=""):
@@ -2189,7 +2226,7 @@ def bl_list():
     if sel:
         bl_sel_header(picked, ids)
     elif top_level:
-        md(f'<div class="bl-title bl-pad" style="margin-top:6px">{esc(title)}</div>')
+        bl_header("back", "list", lambda: (bl_clear_pick(), bl_go("photos")), title)
     else:
         bl_header("back", "list", bl_back_to_albums, title)
     bl_snack()
@@ -2322,7 +2359,6 @@ def bl_editor():
     """Editor laid out like Google Photos on a computer: the whole photo on the left (no scrolling), and on the right the tool tabs
     (Auto, Crop, Adjust, Filters) with that tool's options under them. Light theme."""
     md(BL_CSS)
-    md(BL_NOSCROLL.replace("<style>", "<style>@media (min-width:768px){").replace("</style>", "}</style>"))     # a phone can scroll the photo clear of the panel
     r = R.get(S.get("bl_sel"))
     if r is None:
         S.bl_view = "photos"
@@ -2419,7 +2455,7 @@ def view_baseline():
 
 
 def study_clear_answers():
-    for k in [k for k in S.keys() if str(k).split("_")[0] in ("sus", "tlx", "ueq", "trust", "iv", "fd", "fin")]:
+    for k in [k for k in S.keys() if str(k).split("_")[0] in ("sus", "tlx", "ueq", "trust", "iv", "fd", "fin", "edit")]:
         del S[k]
 
 
@@ -2470,14 +2506,17 @@ def study_tasks_ui():
     t = tasks[sd["i"]]
     md(f'<div class="sect"><b>Version {sd["part"] + 1} of 2</b><span>Task {sd["i"] + 1} of {len(tasks)}</span></div>')
     if sd["i"] == 0:
-        what = ("This version has an assistant that can search, tidy and edit your photos." if sd["cond"] == "PixelSense"
+        what = ("This version has an <b>assistant that can search, tidy and edit your photos by prompt</b>." if sd["cond"] == "PixelSense"
                 else "This version is a regular photo gallery, like the ones on most phones.")
         md(f'<div class="card pad glass info"><p>{what} Try each task the way you normally would. The app notices when you are done. If it is too hard, tap <b>Give up</b>; that is useful for us.</p></div>')
-    md(f'<div class="card pad glass" style="margin:10px 0"><div class="rtitle" style="font-size:17px">{esc(t["text"])}</div></div>')
+    big = task_face(t, 170)
+    md(f'<div class="card pad glass" style="margin:10px 0"><div class="rtitle" style="font-size:17px">{esc(t["text"])}</div>'
+       + (f'<div class="tface-wrap">{big}<div class="ccount">This is Sara</div></div>' if big else '') + '</div>')
     with st.container(key="sm_stb"):
         if st.button("Start task", type="primary", key="st_start"):
+            S.snack = None
             sd.update(running=True, t0=time.time(), nav=0, undos=0, searches=0, opened0=set(S.opened), removed0=set(S.removed), copies0=len(S.copies),
-                      fav0=set(S.fav), manual0=len(S.manual), excl0=set(S.excluded_imgs), gone=set())
+                      fav0=set(S.fav), manual0=len(S.manual), excl0=set(S.excluded_imgs), gone=set(), cats0=len(S.extra_cats))
             if sd["cond"] == "PixelSense":
                 S.view = "home"
             else:
@@ -2493,29 +2532,43 @@ def study_survey():
         sus = []
         for i, q in enumerate(ST.SUS_ITEMS):
             sus.append(scale_radio(f"{i + 1}. {sus_text(q)}", [1, 2, 3, 4, 5], f"sus_{i}", "Strongly disagree", "Strongly agree", "Neutral"))
-        md('<div class="sect"><b>Workload</b></div>')
-        tlx = {k: st.slider(f"{name}. {q}", 0, 100, 50, 5, key=f"tlx_{k}") for k, name, q in tlx_items()}
-        ueq, trust = [None] * len(ueq_items()), [None] * 3
+        tlx = {}
+        if sd["cond"] == "PixelSense" and tlx_items():   # the baseline version has no workload questions
+            md('<div class="sect"><b>Workload</b></div>')
+            tlx = {k: st.slider(f"{name}. {q}", 0, 100, 50, 5, key=f"tlx_{k}") for k, name, q in tlx_items()}
+        px = sd["cond"] == "PixelSense"
+        ueq, trust = ([None] * len(ueq_items()), [None] * len(trust_items())) if px else ([], [])
+        edit_pref = None
         if sd["cond"] == "PixelSense":
+            md('<div class="sect"><b>Editing by prompt</b></div>')
+            edit_pref = scale_radio("Compared with editing a photo by hand, how likely are you to use edit by prompt?", [1, 2, 3, 4, 5], "edit_pref",
+                                    "Much less likely", "Much more likely", "About the same")
+        if sd["cond"] == "PixelSense" and ueq_items():
             md('<div class="sect"><b>Experience</b></div><div class="sub" style="margin-top:0">Pick the point between the two words that matches your impression.</div>')
             ueq = []
             for i, (lo, hi) in enumerate(ueq_items()):
                 ueq.append(scale_radio(f"{lo}  ←→  {hi}", [1, 2, 3, 4, 5, 6, 7], f"ueq_{i}", lo, hi))
+        if sd["cond"] == "PixelSense" and trust_items():
             md('<div class="sect"><b>Trust and control</b></div><div class="sub" style="margin-top:0">1 = strongly disagree, 7 = strongly agree.</div>')
             trust = []
             for i, q in enumerate(trust_items()):
                 trust.append(scale_radio(sus_text(q), [1, 2, 3, 4, 5, 6, 7], f"trust_{i}", "Strongly disagree", "Strongly agree"))
         submitted = st.form_submit_button("Save answers", type="primary")
     if submitted:
-        if None in sus or (sd["cond"] == "PixelSense" and (None in ueq or None in trust)):     # the baseline version has no UEQ or trust questions
+        if None in sus or None in ueq or None in trust or (sd["cond"] == "PixelSense" and edit_pref is None):
             st.warning("Please answer every question.")
             return
-        row = dict(participant=sd["pid"], condition=sd["cond"], sus_score=ST.sus_score(sus), tlx_raw=(ST.tlx_raw(tlx) if hasattr(ST, 'tlx_raw') else round(sum(tlx.values()) / len(tlx), 1)))
+        row = dict(participant=sd["pid"], condition=sd["cond"], sus_score=ST.sus_score(sus))
         row.update({f"sus_{i + 1}": v for i, v in enumerate(sus)})
-        row.update({f"tlx_{k}": v for k, v in tlx.items()})
-        if sd["cond"] == "PixelSense":
+        if tlx:
+            row["tlx_raw"] = ST.tlx_raw(tlx) if hasattr(ST, "tlx_raw") else round(sum(tlx.values()) / len(tlx), 1)
+            row.update({f"tlx_{k}": v for k, v in tlx.items()})
+        if edit_pref is not None:
+            row["edit_prompt_pref"] = edit_pref
+        if sd["cond"] == "PixelSense" and ueq_items():
             row.update({f"ueq_{i + 1}": v for i, v in enumerate(ueq)})
             row["ueq_hedonic"] = ST.ueq_hedonic(ueq) if hasattr(ST, "ueq_hedonic") else round(sum(ueq[4:]) / max(len(ueq[4:]), 1), 2)
+        if sd["cond"] == "PixelSense" and trust_items():
             row.update({f"trust_{i + 1}": v for i, v in enumerate(trust)})
         ST.log_questionnaire(**row)
         sd["step"] = "between" if sd["part"] == 0 else "final"
@@ -2540,14 +2593,15 @@ def study_final():
     with st.form("final_form"):
         pref = st.radio("Which version did you prefer?", both + ["No preference"], index=None, key="fin_pref")
         easy = st.radio("Which was easier to use?", both + ["About the same"], index=None, key="fin_easy")
+        useful = st.radio("Which PixelSense feature was the most useful to you?", ST.USEFUL_FEATURES, index=None, key="fin_useful")
         conf = st.text_area("Was anything confusing? (optional)", key="fin_conf", height=90)
         use = st.radio("Would you use PixelSense on your own photos?", ["Yes", "Maybe", "No"], index=None, horizontal=True, key="fin_use")
         submitted = st.form_submit_button("Finish", type="primary")
     if submitted:
-        if None in (pref, easy, use):
-            st.warning("Please answer the three required questions.")
+        if None in (pref, easy, use, useful):
+            st.warning("Please answer the four required questions.")
             return
-        ST.log_final(participant=sd["pid"], preferred=pref, easiest=easy, most_confusing=conf.replace("\n", " "), would_use=use)
+        ST.log_final(participant=sd["pid"], preferred=pref, easiest=easy, most_useful=useful, most_confusing=conf.replace("\n", " "), would_use=use)
         sd["step"] = "done"
         study_clear_answers()
         st.rerun()
@@ -2555,7 +2609,7 @@ def study_final():
 
 def study_done():
     sd = S.study
-    md(f'<div class="card pad glass info"><p><b>All done. Thank you, {esc(sd["pid"])}!</b></p><p>Your answers have been saved. You can hand the device back.</p></div>')
+    md(f'<div class="card pad glass info"><p><b>All done. Thank you, {esc(sd["pid"])}!</b></p><p>Your answers have been saved.</p></div>')
     with st.expander("Researcher: download data"):
         c1, c2 = st.columns(2)
         for col, name in zip((c1, c2), ("tasks.csv", "questionnaires.csv")):
@@ -2608,7 +2662,8 @@ def view_results():
     rows = [R[i] for i in res["ids"] if visible(R[i])]
     md(f'<div class="sub" style="margin-top:0">{fmt(res["title"])}</div>')
     if rows:
-        image_grid(rows, "rs", open_from_msg, (res["query"],))
+        selection_bar("resall", rows, "these results", can_select_all=True, only_when_selected=True)
+        select_grid(rows, "rs", "resall", 6, open_from_msg, (res["query"],))
     else:
         empty_state("search", "Nothing to show", "These photos are no longer available to the AI.")
 
@@ -2737,14 +2792,11 @@ def view_detail():
                         S.override.pop(r.id, None)
                         notify(f"Back in “{auto}”.")
                         st.rerun()
-            with st.container(key="danger_rm"):
-                if st.button("Remove photo from PixelSense", key="d_remove"):
-                    remove_dialog(r.id)
     md('<div style="height:70px"></div>')
     with st.container(key="actionbar"):
-        c0, ce, c1, c2 = st.columns([1, 2, 2, 2])
+        c0, ce, c1, c2, c3 = st.columns([1, 1.3, 1.3, 1.7, 1.3])
         with ce:
-            if st.button("✎ Edit", key="d_edit"):
+            if st.button("Edit", key="d_edit", icon=":material/edit:", help="Edit"):
                 open_editor(r.id)
         with c0:
             with st.container(key="favbtn_on" if r.id in S.fav else "favbtn_off"):
@@ -2754,11 +2806,15 @@ def view_detail():
                     notify("Added to Favorites." if r.id in S.fav else "Removed from Favorites.")
                     st.rerun()
         with c1:
-            if st.button("Move to…", type="primary", key="d_move"):
+            if st.button("Move to", key="d_move", icon=":material/drive_file_move:", help="Move to a collection"):
                 move_dialog(r.id)
         with c2:
             if st.button("Stop AI", key="d_stopai"):
                 stop_ai_dialog(r.id)
+        with c3:
+            with st.container(key="danger_rm"):
+                if st.button("Delete", key="d_remove", icon=":material/delete:", help="Delete this photo"):
+                    remove_dialog(r.id)
 
 
 # ---- photo editor ------------------------------------------------------------------------------------------
@@ -2910,12 +2966,12 @@ def view_edit():
         # ---- right: prompt, then the manual controls ----
         with right:
             with st.container(key="ed_prompt_box"):
+                md('<div class="edlbl">Edit with a prompt</div>')
                 pc1, pc2 = st.columns([5, 2])
                 with pc1:
-                    st.text_input("Edit with a prompt", key="ed_prompt", on_change=ed_prompt_apply,
+                    st.text_input("Edit with a prompt", key="ed_prompt", on_change=ed_prompt_apply, label_visibility="collapsed",
                                   placeholder="e.g. make it brighter and crop to a square")
                 with pc2:
-                    md('<div style="height:28px"></div>')
                     st.button("Apply", key="ed_prompt_go", type="primary", on_click=ed_prompt_apply)
                 with st.container(key="chips_edit"):
                     ec = st.columns(len(ED_EXAMPLES))
@@ -2926,8 +2982,11 @@ def view_edit():
                 if msg:
                     md(f'<div class="ccount" style="margin:4px 0 8px">{esc(msg[1])}</div>')
 
+            with st.container(key="ed_filters_box"):      # filters are always in view, not hidden in a tab
+                md('<div class="lbl" style="margin:2px 0 4px">Filters</div>')
+                look = st.radio("Filters", ED.FILTERS, horizontal=True, key="ed_look", label_visibility="collapsed")
             with st.container(key="ed_tabs_box"):
-                t_adj, t_crop, t_look, t_res = st.tabs(["Adjust", "Crop & rotate", "Filters", "Resolution"])
+                t_adj, t_crop, t_res = st.tabs(["Adjust", "Crop & rotate", "Resolution"])
                 with t_adj:
                     auto = st.toggle("Auto-enhance", key="ed_auto")
                     b = st.slider("Brightness", -50, 50, 0, key="ed_b")
@@ -2942,8 +3001,6 @@ def view_edit():
                     rot = st.radio("Rotate", [0, 90, 180, 270], horizontal=True, format_func=lambda d: f"{d}°", key="ed_rot", on_change=ed_reframe)
                     flip = st.toggle("Flip horizontally", key="ed_flip", on_change=ed_reframe)
                     st.caption("Rotating, flipping or changing the crop shape puts the frame back in the centre.")
-                with t_look:
-                    look = st.radio("Look", ED.FILTERS, horizontal=True, key="ed_look")
                 with t_res:
                     sc = st.radio("Output size", [1, 2, 4], horizontal=True, format_func=lambda x: "Original" if x == 1 else f"{x}x larger", key="ed_sc")
                     st.caption("Resizes with high-quality resampling and gentle sharpening. It cannot invent detail the way a generative AI would.")
@@ -3306,6 +3363,8 @@ def composer():
 
 def nav_to(key):
     S.menu, S.about_from = False, None
+    if key == "home":                    # tapping Home also closes the search results
+        S.search_open, S.chat = False, []
     if key == "favorites":
         S.hfilter = "Favorites"
         go("photos")

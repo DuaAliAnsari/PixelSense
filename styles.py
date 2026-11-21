@@ -1182,3 +1182,95 @@ CSS = CSS + r"""
 CSS = CSS + r"""
 .att-sum.over{border-left:4px solid #D6455D}
 """
+
+CSS = CSS + r"""
+@media (max-width:520px){.st-key-actionbar button{padding-left:4px!important;padding-right:4px!important;font-size:13px!important}.st-key-actionbar [data-testid="stHorizontalBlock"]{gap:6px!important}}
+.st-key-danger_rm button,.st-key-danger_rm button p{color:#B3261E!important}
+"""
+
+CSS = CSS + r"""
+.st-key-link_clrsearch,.st-key-link_clrsearch>div,.st-key-link_clrsearch [data-testid="stVerticalBlock"]{width:100%!important;align-items:flex-end!important}
+.st-key-link_clrsearch [data-testid="stElementContainer"],.st-key-link_clrsearch [data-testid="stButton"],.st-key-link_clrsearch .stButton{display:flex!important;justify-content:flex-end!important;width:100%!important}
+.st-key-link_clrsearch button{width:auto!important;padding:0 2px!important;margin-left:auto!important}
+img.me,.me{width:80px!important;height:80px!important;min-width:80px!important;flex:none!important}
+.st-key-appbar [data-testid="stHorizontalBlock"]{align-items:center!important}
+.st-key-ed_filters_box [data-testid="stRadio"] [role="radiogroup"]{gap:6px;flex-wrap:wrap}
+.st-key-ed_filters_box [data-testid="stRadio"] label{padding:7px 12px;border-radius:999px;width:auto;white-space:nowrap;word-break:normal;writing-mode:horizontal-tb}
+.st-key-ed_filters_box [data-testid="stRadio"] label *{white-space:nowrap!important;word-break:normal!important;writing-mode:horizontal-tb!important}
+@media (max-width:767px){
+  .st-key-ed_filters_box [data-testid="stRadio"] [role="radiogroup"]{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px!important}
+  .st-key-ed_filters_box [data-testid="stRadio"] label{width:100%!important;min-width:0;justify-content:center;padding:8px 4px;font-size:12.5px;text-align:center;box-sizing:border-box}
+  .st-key-ed_filters_box [data-testid="stRadio"] label>div:first-child{display:none!important}
+}
+@media (min-width:768px){
+  [class*="st-key-att_img"]:has(.att-big),[class*="st-key-att_m"]:has(.att-big){max-width:560px}
+  .att-big .att-pic{aspect-ratio:16/8;max-height:230px}
+  .att-big .rtitle{font-size:15.5px}
+}
+"""
+
+CSS = CSS + r"""
+.tface{border-radius:50%;object-fit:cover;border:3px solid #fff;box-shadow:0 6px 18px rgba(31,33,64,.22);display:block}
+.tface-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:14px}
+.sb-row{display:flex;align-items:center;gap:12px;min-width:0}
+.sb-row .tface{flex:none;border-width:2px}
+"""
+
+CSS = CSS + r"""
+/* ---------- fixes: phone action bar, Deselect all, task-bar text, prompt row, search-result ticks ---------- */
+.edlbl{font-size:14px;font-weight:700;color:#1F2140;margin:0 0 6px}
+.st-key-ed_prompt_box [data-testid="stHorizontalBlock"]:first-of-type{align-items:stretch!important}
+.st-key-ed_prompt_box .stButton>button{min-height:54px!important;height:54px!important;margin-top:0!important}
+.st-key-stack_edit .st-key-chips_edit [data-testid="stHorizontalBlock"]{display:flex!important;flex-wrap:wrap!important;gap:8px!important}
+.st-key-stack_edit .st-key-chips_edit [data-testid="stColumn"]{flex:0 0 auto!important;width:auto!important;min-width:0!important}
+@media (max-width:767px){
+  .st-key-stack_edit .st-key-chips_edit [data-testid="stColumn"]{flex:1 1 calc(50% - 8px)!important;width:calc(50% - 8px)!important}
+  .st-key-chips_edit .stButton>button{width:100%!important;min-height:38px;white-space:nowrap}
+  .st-key-ed_prompt_box [data-testid="stHorizontalBlock"]:first-of-type{flex-wrap:nowrap!important;gap:10px!important}
+  [data-testid="stColumn"]:has(.st-key-blh_selall){flex:0 0 auto!important;width:auto!important;min-width:max-content!important}
+  [class*="st-key-blh_selall"] button{white-space:nowrap!important;padding:0 4px!important;font-size:13.5px!important}
+  .sb-t b.t1{font-size:13px}.sb-t b.t2{font-size:12px}.sb-t b.t3{font-size:11px}.sb-t b.t4{font-size:10.5px}
+  .sb-t b{line-height:1.15}.sb-t span{font-size:10.5px;line-height:1.2}
+  .st-key-studybar{padding:0 12px!important}
+}
+@media (min-width:768px){.sb-t b.t3{font-size:13px}.sb-t b.t4{font-size:12px}}
+.sb-t{overflow:hidden;max-height:calc(var(--sbh) - 8px)}
+@media (max-width:520px){
+  .st-key-actionbar{padding:10px 8px 14px!important}
+  .st-key-actionbar [data-testid="stHorizontalBlock"]{gap:5px!important;flex-wrap:nowrap!important}
+  .st-key-actionbar [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important;width:auto!important}
+  .st-key-actionbar [data-testid="stColumn"]:first-child{flex:0 0 46px!important;width:46px!important;min-width:46px!important}
+  .st-key-actionbar button{padding-left:2px!important;padding-right:2px!important;font-size:12px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+"""
+
+CSS = CSS + r"""
+@media (max-width:520px){
+  .st-key-actionbar [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;row-gap:8px!important}
+  .st-key-actionbar [data-testid="stColumn"],.st-key-actionbar [data-testid="stColumn"]:first-child{flex:1 1 calc(33.33% - 8px)!important;width:auto!important;min-width:0!important}
+  .st-key-actionbar button{font-size:13px!important;min-height:44px}
+  .st-key-stack_detail{padding-bottom:84px}
+}
+"""
+
+CSS = CSS + r"""
+/* photo-detail action bar: five equal-looking buttons in one row; on a phone Edit, Move to and Delete show only their symbol */
+.st-key-actionbar .stButton>button{border:1.5px solid #E7E8F2!important;background:#fff!important;color:#1F2140!important;box-shadow:none!important;font-weight:700}
+.st-key-actionbar .st-key-danger_rm button{color:#B3261E!important;border-color:#F3C9CD!important}
+.st-key-actionbar .st-key-danger_rm button *{color:#B3261E!important}
+@media (max-width:520px){
+  .st-key-actionbar{padding:10px 8px 14px!important}
+  .st-key-actionbar [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:6px!important;row-gap:0!important}
+  .st-key-actionbar [data-testid="stColumn"],.st-key-actionbar [data-testid="stColumn"]:first-child{flex:1 1 0!important;width:auto!important;min-width:0!important}
+  .st-key-actionbar [data-testid="stColumn"]:nth-child(4){flex:1.9 1 0!important}
+  .st-key-actionbar button{min-height:46px!important;padding:0 4px!important;font-size:13px!important;justify-content:center}
+  .st-key-d_edit button p,.st-key-d_move button p,.st-key-d_remove button p{display:none!important}
+  .st-key-d_edit button,.st-key-d_move button,.st-key-d_remove button{gap:0!important}
+  .st-key-stack_detail{padding-bottom:72px}
+}
+"""
+
+CSS = CSS + r"""
+.st-key-actionbar button [data-testid="stIconMaterial"]{font-size:25px!important;font-variation-settings:'FILL' 0,'wght' 600,'GRAD' 0,'opsz' 24!important}
+.st-key-favbtn_on button,.st-key-favbtn_off button{font-size:26px!important;line-height:1}
+"""

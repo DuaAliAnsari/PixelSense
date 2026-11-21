@@ -28,23 +28,31 @@ CONSENT = ("You are invited to take part in a short usability study of a photo a
 # Six task types, each in two parallel versions (set A and set B) so nobody repeats the same task in the second condition.
 # Each participant does one set with PixelSense and the other with the Gallery baseline (which set goes with which condition rotates
 # with the participant number), plus core tasks. PixelSense: 6 + 1 + 7 = 14 tasks. Gallery (Google Photos style): 6 + 4 = 10 tasks.
+# PixelSense also has the clean-up (blurry photos) task; the Gallery baseline has no such feature, so it does not get that task.
 # Success is detected by the app: the correct photo was opened, the right photos were favourited, enough of the right photos were removed,
 # or the edited copy was saved. Nothing is typed and nobody has to watch.
 # kind: open = any target photo opened; fav = all targets favourited; clean = 5+ removed and 4+ of them are targets; bw = B&W copy of a beach photo.
+# F1: every month has several bills (a second electricity meter and a gas bill), so a plain gallery means opening each one to read the amount,
+# while PixelSense can search the amount or read it in the result. The amount in the task text is what tells the right bill apart.
+# S1: two different photos must be hearted.
+# C1: PixelSense only (blurry photos). Its meme variant (B) is kept for a meme-deletion task but is not used by default.
 TYPES = [
-    dict(type="F1", rq="RQ1", title="Find a bill from a specific year", kind="open",
-         A=("Find and open the electricity bill from July 2024.", {"img62"}),
-         B=("Find and open the electricity bill from August 2025.", {"img60"})),
+    dict(type="F1", rq="RQ1", title="Find a bill from a specific month", kind="open",
+         A=("Find and open the electricity bill from July 2024 for Rs 10,510.", {"img62"}),
+         B=("Find and open the electricity bill from August 2025 for Rs 9,311.", {"img60"})),
     dict(type="S1", rq="RQ3", title="Surface what matters", kind="fav",
-         A=("Mark with a heart (♥) the two bills that are coming due soon.", {"img10", "img11"}),
-         B=("Mark with a heart (♥) the assignment deadline and the Tech Fest event that are coming up.", {"img13", "img18"})),
-    dict(type="C1", rq="RQ2", title="Clean up", kind="clean",
+         A=("Mark two different photos with a heart (♥): the electricity bill and the internet bill that need paying.", {"img10", "img11"}),
+         B=("Mark two different photos with a heart (♥): the HCI assignment notice and the Tech Fest poster.", {"img13", "img18"})),
+    dict(type="C1", rq="RQ2", title="Clean up", kind="clean", only="PixelSense",
          A=("Free up space: remove at least 5 blurry photos.", {"img06", "img38", "img39", "img40", "img41", "img42", "img43"}),
-         B=("Free up space: remove at least 5 memes or joke screenshots.", {f"img{n}" for n in range(73, 80)})),
+         B=("Free up space: remove at least 5 memes or joke screenshots.", {"img73", "img74", "img75", "img76", "img101", "img102", "img103", "img104"})),
 ]
-EDIT_TASK = dict(type="E1", rq="RQ4", title="Edit by prompt", kind="bw",
-                 text="Make a beach photo black and white and save it as a copy.", targets=set())
-BEACH_IDS = {"img22", "img36", "img49"}
+# E1: the same edit (black and white, saved as a copy) in both versions, on a different photo in each. Where the photo is differs per version, so
+# nobody learns its position; PixelSense asks them to use Edit with a prompt, the Gallery leaves them to find the manual editor.
+EDIT_TYPE = dict(type="E1", rq="RQ4", title="Edit a photo: crop and black and white", kind="bw",
+                 A=dict(subject="a photo of the beach at sunset", targets={"img22", "img36", "img49", "img99", "img100"}),
+                 B=dict(subject="a photo of a tiger", targets={"img56", "img96"}))
+BEACH_IDS = EDIT_TYPE["A"]["targets"]          # kept for older code
 
 # Core photo-app tasks. Most exist in both conditions, because the Gallery baseline is modelled on Google Photos and a real gallery app has
 # them: Favorites (heart), Recently deleted and restore, Albums (add photos from inside the album) and the editor (Crop).
@@ -54,21 +62,20 @@ CORE = [
     dict(id="M1", rq="RQ6", title="Delete and restore (trash)", kind="restore", targets={"img53", "img54"}, both=True,
          text="Remove one photo of the chocolate cake, then bring it back.",
          text_base="Delete one photo of the chocolate cake, then restore it from Recently deleted."),
-    dict(id="E2", rq="RQ4", title="Crop a photo", kind="crop", targets={"img68"}, both=True,
-         text="Crop the photo of the snow-capped mountains and save the cropped copy.",
-         text_base="Edit the photo of the snow-capped mountains: crop it and save a copy."),
     dict(id="M2", rq="RQ6", title="Make an album, then add to it", kind="album", targets=set(), both=True,
          text="Create a new collection called Trip with one photo in it, then add a second photo to the same collection.",
          text_base="Create a new album called Trip with one photo in it, then add a second photo to the same album."),
-    dict(id="P1", rq="RQ6", title="View photos by face", kind="face", targets={"sara"}, both=False,
-         text="Show all the photos of Sara."),
-    dict(id="M3", rq="RQ6", title="Act on a bill", kind="paid", targets={"img10"}, both=False,
-         text="Mark the electricity bill as paid."),
-    dict(id="M4", rq="RQ6", title="Add a deadline", kind="deadline", targets=set(), both=False,
-         text="Add a reminder for a passport renewal due next month."),
+    # P1: the same idea in both versions. PixelSense: open a person's face group. Gallery: no face groups, so find Sara by looking and open 3 of her photos.
+    dict(id="P1", rq="RQ6", title="Find photos of a person", kind="face", targets={"bro"}, both=True,
+         text="Use the face groups (People) to show all the photos of Person 1.",
+         kind_base="open3", targets_base={"img92", "img93", "img94"},
+         text_base="Find photos of Sara and open three of them.", person_base="sara"),
+    dict(id="X1", rq="RQ6", title="Make a collection from search results", kind="searchcoll", targets=set(), both=False,
+         text="Search for photos of the beach, then make a collection from the results."),
     dict(id="P2", rq="RQ5", title="Stay in control of AI", kind="control", targets=set(), both=False,
          text="Choose any one photo and stop the app’s AI from using it."),
 ]
+# Removed on request: the crop-only task (now part of the edit task), "mark the bill as paid" and "add a reminder".
 CLEAN_MIN, CLEAN_MIN_CORRECT = 5, 4
 
 
@@ -84,16 +91,21 @@ def tasks_for(cond: str, set_letter: str) -> list:
     base = cond != "PixelSense"
     out = []
     for t in TYPES:
-        text = t[set_letter][0]
-        out.append(dict(id=t["type"], task_set=set_letter, rq=t["rq"], title=t["title"], kind=t["kind"], text=text, targets=t[set_letter][1]))
-    if not base:
-        e = EDIT_TASK
-        out.append(dict(id=e["type"], task_set="-", rq=e["rq"], title=e["title"], kind=e["kind"], text=e["text"], targets=e["targets"]))
+        if base and t.get("only") == "PixelSense":
+            continue                               # no blurry-photo clean-up task in the Gallery baseline
+        sl = "A" if t["type"] == "C1" else set_letter      # PixelSense always gets the blurry-photos version
+        out.append(dict(id=t["type"], task_set=sl, rq=t["rq"], title=t["title"], kind=t["kind"], text=t[sl][0], targets=t[sl][1]))
+    e = EDIT_TYPE
+    subj, tg = e[set_letter]["subject"], e[set_letter]["targets"]
+    text = (f"Edit a photo: search for {subj}, then use Edit with a prompt to crop it and make it black and white, and save it as a copy." if not base
+            else f"Edit a photo: find {subj}, crop it, make it black and white and save it as a copy.")
+    out.append(dict(id=e["type"], task_set=set_letter, rq=e["rq"], title=e["title"], kind=e["kind"], text=text, targets=tg))
     for c in CORE:
         if base and not c["both"]:
             continue
-        out.append(dict(id=c["id"], task_set="-", rq=c["rq"], title=c["title"], kind=c["kind"], targets=c["targets"],
-                        text=c["text_base"] if base else c["text"]))
+        out.append(dict(id=c["id"], task_set="-", rq=c["rq"], title=c["title"], kind=c.get("kind_base", c["kind"]) if base else c["kind"],
+                        person=c.get("person_base") if base else None,
+                        targets=c.get("targets_base", c["targets"]) if base else c["targets"], text=c["text_base"] if base else c["text"]))
     return out
 
 
@@ -132,9 +144,11 @@ def counterbalance(pid: str) -> str:
 
 TASK_FIELDS = ["timestamp", "participant", "order", "condition", "task_id", "task_set", "rq", "seconds", "outcome", "success", "wrong_actions",
                "photos_opened", "searches", "undos", "screens_visited", "seq"]
-Q_FIELDS = ["timestamp", "participant", "condition"] + [f"sus_{i + 1}" for i in range(SUS_N)] + ["sus_score"]
+Q_FIELDS = ["timestamp", "participant", "condition"] + [f"sus_{i + 1}" for i in range(SUS_N)] + ["sus_score", "edit_prompt_pref"]
 PARTICIPANT_FIELDS = ["timestamp", "participant", "order", "task_sets", "age_range", "photos_kept", "search_freq"]
-FINAL_FIELDS = ["timestamp", "participant", "preferred", "easiest", "most_confusing", "would_use"]
+FINAL_FIELDS = ["timestamp", "participant", "preferred", "easiest", "most_useful", "most_confusing", "would_use"]
+USEFUL_FEATURES = ["Asking in plain words (search)", "Overdue and Coming up", "Clean up", "Edit with a prompt", "People (face groups)",
+                   "Making a collection from search results", "Stopping the AI from using a photo"]
 
 
 def _webhook_url():
