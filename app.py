@@ -120,6 +120,18 @@ def fresh_state():
 if "boot" not in S:
     S.update(fresh_state())
     S.boot = True
+if not S.get("restore_done"):
+    # A refresh (or a dropped connection) starts a new session. The study keeps its place in the URL (?pid=P01) and in study_data/progress_P01.json,
+    # so the participant lands back on the task or questionnaire they were on instead of starting again.
+    S.restore_done = True
+    _pid = st.query_params.get("pid")
+    _prog = ST.load_progress(_pid) if _pid else None
+    if _prog and _prog.get("step") not in (None, "done"):
+        _prog.update(running=False, nav=0, undos=0)
+        if _prog["step"] == "seq":          # the timer and outcome of a half-finished task are gone: redo that task
+            _prog["step"] = "tasks"
+        S.study = _prog
+        S.view = "study"
 E.sync_copies(S.copies)
 E.sync_opened(S.opened)   # keep the library tables in step with this session (edited copies, undo, reset)
 
@@ -1596,10 +1608,18 @@ def bl_open(i):
     bl_go("viewer", bl_sel=i, bl_back=back)
 
 
+def bl_rerun():
+    """Re-run only the photo grid when selecting (fast); fall back to the whole app outside the grid fragments."""
+    try:
+        st.rerun(scope="fragment")
+    except Exception:
+        st.rerun()
+
+
 def bl_tap(i):
     if S.get("bl_select"):
         S.bl_picked = set(S.get("bl_picked", set())) ^ {i}
-        st.rerun()
+        bl_rerun()
     bl_open(i)
 
 
@@ -1612,8 +1632,8 @@ def bl_tile(r):
         box = (f'<span style="position:absolute;right:7px;bottom:7px;width:22px;height:22px;border-radius:6px;box-sizing:border-box;'
                f'border:2px solid #fff;background:{"#1a8fd1" if picked else "rgba(0,0,0,.18)"};color:#fff;font-size:14px;line-height:18px;text-align:center;'
                f'box-shadow:0 0 2px rgba(0,0,0,.4)">{"✓" if picked else ""}</span>')
-    return (f'<div class="tile pressable" data-pid="{r.id}" style="position:relative;-webkit-touch-callout:none;user-select:none"><img src="{img_uri(r.file, 320, 320)}" '
-            f'alt="Photo from {r.taken}" style="aspect-ratio:1/1;object-fit:cover;border-radius:0;width:100%;display:block">{heart}{box}</div>')
+    return (f'<div class="tile pressable" data-pid="{r.id}" style="position:relative;-webkit-touch-callout:none;user-select:none"><img src="{img_uri(r.file, 200, 200)}" draggable="false" '
+            f'alt="Photo from {r.taken}" style="aspect-ratio:1/1;object-fit:cover;border-radius:0;width:100%;display:block;-webkit-user-drag:none;pointer-events:none">{heart}{box}</div>')
 
 
 def bl_grid(rows, prefix):
@@ -1645,6 +1665,14 @@ BL_CSS = ("<style>.stApp,[data-testid='stAppViewContainer']{background:#fff!impo
           ".st-key-bl_lpwrap{height:0;overflow:hidden;margin:0!important}.st-key-bl_lpwrap iframe{height:0}"
           "[class*='st-key-blh_'] button,.st-key-bl_ghost button{background:transparent!important;border:0!important;box-shadow:none!important;color:#1b1c1e!important}"
           "[class*='st-key-blh_'] button:disabled{opacity:.35!important}"
+          ".st-key-blh_pickx button p,.st-key-blh_pickx button{font-size:26px!important;line-height:1!important}"
+          ".st-key-blh_pickok button{min-height:48px!important;min-width:52px!important;margin-left:auto}"
+          ".st-key-blh_pickok button p{font-size:36px!important;line-height:1!important;font-weight:800!important;color:#1a8fd1!important}"
+          ".st-key-blh_pickok button:disabled p{color:#9aa0a6!important}"
+          ".st-key-blh_save button{background:#1a8fd1!important;color:#fff!important;border-radius:999px!important;padding:6px 20px!important;min-height:40px!important;"
+          "width:auto!important;min-width:84px;white-space:nowrap!important;float:right;box-shadow:0 2px 6px rgba(26,143,209,.35)!important}"
+          ".st-key-blh_save button p{color:#fff!important;font-weight:600!important;font-size:16px!important;white-space:nowrap!important;margin:0}"
+          ".st-key-blh_save button:disabled{background:#c8ccd0!important;box-shadow:none!important}"
           ".bl-ptab{text-align:center;padding:12px 0 10px;font-size:17px;color:#80868b;border-bottom:2px solid #e6e8eb}"
           ".bl-ptab.on{color:#1a8fd1;border-bottom-color:#1a8fd1;font-weight:600}"
           "</style>")
@@ -1652,7 +1680,7 @@ BL_CSS = ("<style>.stApp,[data-testid='stAppViewContainer']{background:#fff!impo
 
 def bl_header(left_icon, left_key, left_fn, title, right=None, sub=None):
     """Light top bar: icon button on the left, title, optional action on the right."""
-    c = st.columns([1, 6, 1.4] if right else [1, 7])
+    c = st.columns([1, 4.2, 2.2] if right else [1, 7])
     with c[0]:
         with st.container(key=f"blh_{left_key}"):
             if st.button("✕" if left_icon == "close" else "←", key=f"blhb_{left_key}", help="Close" if left_icon == "close" else "Back"):
@@ -1758,27 +1786,45 @@ def bl_pick_leave():
 
 def bl_pick_tab_set(tab):
     S.bl_pick_tab, S.bl_pick_src = tab, None
+    bl_rerun()
+
+
+def bl_pick_src_set(src):
+    S.bl_pick_src = src
+    bl_rerun()
+
+
+def bl_pick_confirm(name, picked):
+    S.bl_method_open = (name, list(picked))
     st.rerun()
 
 
 def bl_pick():
-    """Full-screen photo picker, as in the stock Gallery: X, 'None Selected' / 'N Selected', tick, and All Photos | Albums tabs."""
+    """Full-screen photo picker, as in the stock Gallery: X, 'None Selected' / 'N Selected', a big tick, and All Photos | Albums tabs."""
     md(BL_CSS)
-    name = S.get("bl_pick_album")
+    mo = S.pop("bl_method_open", None)
+    if mo:
+        bl_method_dialog(*mo)       # opened from here (not from inside the fragment below) so the dialog is a top-level one
     S.bl_select = True
+    _bl_pick_body()
+
+
+@st.fragment
+def _bl_pick_body():
+    name = S.get("bl_pick_album")
     already = set(S.bl_albums.get(name, []))
     picked = sorted(set(S.get("bl_picked", set())) - already)
-    c = st.columns([1, 6, 1.2])
+    c = st.columns([1, 5, 1.6])
     with c[0]:
         with st.container(key="blh_pickx"):
             if st.button("✕", key="bl_pick_x", help="Cancel"):
                 bl_pick_leave()
     with c[1]:
-        md(f'<div style="font-size:20px;font-weight:600;color:#1b1c1e;margin-top:6px">{f"{len(picked)} Selected" if picked else "None Selected"}</div>')
+        md(f'<div style="font-size:20px;font-weight:600;color:#1b1c1e;margin-top:8px">{f"{len(picked)} Selected" if picked else "None Selected"}</div>')
     with c[2]:
         with st.container(key="blh_pickok"):
             if st.button("✓", key="bl_pick_ok", help="Done", disabled=not picked):
-                bl_method_dialog(name, picked)
+                bl_pick_confirm(name, picked)
     snack_ui()
     tab = S.get("bl_pick_tab", "all")
     t = st.columns(2)
@@ -1787,7 +1833,6 @@ def bl_pick():
             tappable(f"pk_tab_{key}", f'<div class="bl-ptab{" on" if tab == key else ""}">{label}</div>', bl_pick_tab_set, key, label=label)
     src = S.get("bl_pick_src")
     if tab == "albums" and src is None:
-        rows = bl_rows()
         cells = [("cam", "Camera", ("camera", None)), ("shots", "Screenshots", ("shots", None))]
         cells += [(f"u_{slug(n)}", n, ("album", n)) for n in S.bl_albums if n != name]
         for k in range(0, len(cells), 3):
@@ -1797,7 +1842,7 @@ def bl_pick():
                     items = bl_src_items(sr)
                     img = f'<img src="{img_uri(items[0].file, 320, 320)}" alt="">' if items else '<div class="ph"></div>'
                     tappable(f"pka_{key}", f'<div class="bl-alb pressable">{img}<div class="nm">{esc(title)}</div><div class="ct">{len(items)}</div></div>',
-                             lambda sr=sr: (S.update(bl_pick_src=sr), st.rerun()), label=f"Open {title}")
+                             bl_pick_src_set, sr, label=f"Open {title}")
         return
     items = [r for r in (bl_src_items(src) if tab == "albums" else bl_rows()) if r.id not in already]
     by_day = {}
@@ -1874,19 +1919,36 @@ def bl_toggle_ids(ids):
     S.bl_picked = cur - set(ids) if set(ids) <= cur else cur | set(ids)
 
 
+def bl_dialog_req(kind, ids):
+    S.bl_dlg = (kind, list(ids))
+    st.rerun()
+
+
 def bl_selected_bar(picked):
     with st.container(key="bl_bar"):
         c = st.columns(3)
         with c[0]:
-            bl_act("sel_copy", "copy", "Copy", lambda: bl_to_album_dialog(picked, False), disabled=not picked)
+            bl_act("sel_copy", "copy", "Copy", lambda: bl_dialog_req("copy", picked), disabled=not picked)
         with c[1]:
-            bl_act("sel_move", "move", "Move", lambda: bl_to_album_dialog(picked, True), disabled=not picked)
+            bl_act("sel_move", "move", "Move", lambda: bl_dialog_req("move", picked), disabled=not picked)
         with c[2]:
-            bl_act("sel_del", "trash", "Delete", lambda: bl_delete_dialog(picked), disabled=not picked)
+            bl_act("sel_del", "trash", "Delete", lambda: bl_dialog_req("delete", picked), disabled=not picked)
 
 
 def bl_photos():
     md(BL_CSS)
+    d = S.pop("bl_dlg", None)
+    if d:
+        kind, ids = d
+        if kind == "delete":
+            bl_delete_dialog(ids)
+        else:
+            bl_to_album_dialog(ids, kind == "move")
+    _bl_photos_body()
+
+
+@st.fragment
+def _bl_photos_body():
     sel = bool(S.get("bl_select"))
     rows = bl_rows()
     all_ids = [r.id for r in rows]
@@ -1914,7 +1976,7 @@ def bl_photos():
         S.bl_lp_n = held["n"]               # holding a photo starts select mode with that photo ticked, like the phone's Gallery app
         S.bl_select = True
         S.bl_picked = set(S.get("bl_picked", set())) | {held["pid"]}
-        st.rerun()
+        bl_rerun()
     by_day = {}
     for r in rows:
         by_day.setdefault(r.taken, []).append(r)
@@ -2235,6 +2297,7 @@ def view_study():
     sd = S.study
     if not sd:
         return study_intro()
+    ST.save_progress(sd)
     {"tasks": study_tasks_ui, "seq": study_seq, "survey": study_survey, "between": study_between, "final": study_final}.get(sd["step"], study_done)()
 
 
@@ -2253,6 +2316,7 @@ def study_intro():
                                age_range=age, photos_kept=kept, search_freq=freq)
             S.study = dict(pid=pid, order=order, sets=sets, part=0, cond=order[0], i=0, step="tasks", running=False, nav=0, undos=0)
             study_goto_part(0)
+            st.query_params["pid"] = pid
             st.rerun()
 
 
@@ -2347,6 +2411,7 @@ def study_done():
                 st.download_button(f"Download {name}", ST.read_csv_bytes(name), file_name=name, mime="text/csv", key=f"dl_{name}")
     with st.container(key="sm_stb"):
         if st.button("Start next participant", type="primary", key="st_next"):
+            st.query_params.clear()
             S.update(fresh_state())
             S.view = "welcome"
             st.rerun()

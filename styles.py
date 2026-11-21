@@ -1020,4 +1020,17 @@ CSS = CSS + r"""
 .st-key-snack [data-testid="stColumn"]:last-child{flex:0 0 auto!important;width:auto!important;min-width:0!important}
 .st-key-snack .stButton{width:auto!important;display:flex;justify-content:flex-end}
 .st-key-snack .stButton>button{width:auto!important;min-width:0!important;padding:0 16px!important}
+
+/* ---- welcome collage: fixed proportions at every width, faces kept in frame ---- */
+.mos{display:grid!important;grid-template-columns:repeat(3,1fr)!important;grid-template-rows:1fr 1fr!important;gap:10px!important;aspect-ratio:3/2;width:100%}
+.mos .m{position:relative;min-height:0;border-radius:16px!important}
+.mos .m img{position:absolute;inset:0;width:100%!important;height:100%!important;object-fit:cover}
+.mos .a img{object-position:50% 35%}.mos .b img{object-position:50% 22%}
+@media (max-width:640px){.mos{grid-template-rows:1fr 1fr!important}}
+
+/* ---- hide Streamlit's own chrome (toolbar, GitHub icon, hosting badge, manage-app / profile buttons) and keep content clear of the corner ---- */
+[data-testid="stToolbar"],[data-testid="stAppDeployButton"],[data-testid="stStatusWidget"],[data-testid="stDecoration"],.stAppDeployButton,.stDeployButton,
+[class*="viewerBadge"],[class*="_viewerBadge"],[class*="_profileContainer"],[class*="_terminalButton"],[class*="githubIcon"],[class*="GithubIcon"],
+[data-testid="manage-app-button"],[data-testid="appCreatorAvatar"],a[href*="streamlit.io/cloud"],a[href*="share.streamlit.io"]{display:none!important;visibility:hidden!important}
+[data-testid="stMainBlockContainer"]{padding-bottom:110px!important}
 """

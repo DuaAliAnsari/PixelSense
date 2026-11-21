@@ -10,7 +10,7 @@ textColor = "#1B1D3A"
 font = "sans serif"
 
 [client]
-toolbarMode = "minimal"
+toolbarMode = "viewer"
 showSidebarNavigation = false
 
 [browser]

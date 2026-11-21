@@ -9,7 +9,7 @@
   P.__blLPsend = function (pid) { send("streamlit:setComponentValue", { value: { pid: pid, n: Date.now() }, dataType: "json" }); };
   if (!P.__blLPinstalled) {
     P.__blLPinstalled = true;
-    var doc = P.document, timer = null, sx = 0, sy = 0;
+    var doc = P.document, timer = null, sx = 0, sy = 0, t0 = 0;
     function tileOf(t) {
       var el = t;
       while (el && el !== doc.body) {
@@ -25,7 +25,7 @@
     doc.addEventListener("pointerdown", function (e) {
       var tile = tileOf(e.target);
       if (!tile) return;
-      sx = e.clientX; sy = e.clientY; clear();
+      sx = e.clientX; sy = e.clientY; t0 = Date.now(); clear();
       timer = setTimeout(function () {
         timer = null;
         var swallow = function (ev) { ev.stopPropagation(); ev.preventDefault(); };
@@ -33,10 +33,14 @@
         setTimeout(function () { doc.removeEventListener("click", swallow, true); }, 700);
         if (P.navigator.vibrate) { try { P.navigator.vibrate(15); } catch (x) {} }
         if (P.__blLPsend) P.__blLPsend(tile.getAttribute("data-pid"));
-      }, 450);
+      }, 350);
     }, true);
     doc.addEventListener("pointermove", function (e) { if (timer && (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8)) clear(); }, true);
-    ["pointerup", "pointercancel", "pointerleave"].forEach(function (n) { doc.addEventListener(n, clear, true); });
+    ["pointerup", "pointerleave"].forEach(function (n) { doc.addEventListener(n, clear, true); });
+    // Android fires pointercancel when it starts an image drag or the long-press menu. A cancel after the finger has been down a while is
+    // the hold itself, not a scroll, so it must not cancel the timer (a scroll cancels within ~100 ms).
+    doc.addEventListener("pointercancel", function () { if (Date.now() - t0 < 200) clear(); }, true);
+    doc.addEventListener("dragstart", function (e) { if (tileOf(e.target)) e.preventDefault(); }, true);
     doc.addEventListener("contextmenu", function (e) { if (tileOf(e.target)) e.preventDefault(); }, true);
   }
   window.addEventListener("message", function (ev) {
