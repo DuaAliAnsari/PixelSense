@@ -1,7 +1,7 @@
 """Evaluation kit: tasks, questionnaires, scoring and data files for the usability study.
 
 Design (see RESEARCH_PLAN.md): a within-subjects comparison. Each participant does matched tasks twice, once with PixelSense and
-once with a plain 'Gallery (baseline)' that has no search, no suggestions and no assistant, in counterbalanced order.
+once with a plain 'Gallery (baseline)' that has no search, no suggestions and no assistant, in a fixed order (Gallery first, then PixelSense).
 One session = one participant + one condition. Run the app twice per participant.
 
 Data is appended to study_data/tasks.csv and study_data/questionnaires.csv the moment it is collected, so nothing is lost
@@ -25,58 +25,44 @@ CONSENT = ("You are invited to take part in a short usability study of a photo a
            "The photos are samples, not yours. If a task is too hard you can tap Give up at any time; that is useful for us and is not a failure on your part. "
            "We record task times, taps and your answers under a participant number, not your name. You may stop at any time without giving a reason.")
 
-# Six task types, each in two parallel versions (set A and set B) so nobody repeats the same task in the second condition.
-# Each participant does one set with PixelSense and the other with the Gallery baseline (which set goes with which condition rotates
-# with the participant number), plus core tasks. PixelSense: 6 + 1 + 7 = 14 tasks. Gallery (Google Photos style): 6 + 4 = 10 tasks.
-# PixelSense also has the clean-up (blurry photos) task; the Gallery baseline has no such feature, so it does not get that task.
-# Success is detected by the app: the correct photo was opened, the right photos were favourited, enough of the right photos were removed,
-# or the edited copy was saved. Nothing is typed and nobody has to watch.
-# kind: open = any target photo opened; fav = all targets favourited; clean = 5+ removed and 4+ of them are targets; bw = B&W copy of a beach photo.
-# F1: every month has several bills (a second electricity meter and a gas bill), so a plain gallery means opening each one to read the amount,
-# while PixelSense can search the amount or read it in the result. The amount in the task text is what tells the right bill apart.
-# S1: two different photos must be hearted.
-# C1: PixelSense only (blurry photos). Its meme variant (B) is kept for a meme-deletion task but is not used by default.
+# Seven tasks, the same in both versions. Where the wording says "different photos" (find a bill, favourite two photos, edit a photo, find a person)
+# each version gets a different photo so nobody remembers where it was; the kind of task is identical. Which parallel set goes with which
+# version rotates with the participant number. Success is detected by the app (the right photo opened, the right photos hearted,
+# every meme removed, an edited copy saved, a collection holding all the posters), so nothing is typed and nobody has to watch.
+# kind: open = a target photo opened; fav = all targets hearted; clean = every target removed; edit = a black-and-white AND cropped copy
+# of a target; restore = removed then brought back; collect = a collection/album with this name that holds every target.
+MEMES = {"img73", "img74", "img75", "img76", "img77", "img78", "img79", "img82"}
+POSTERS = {"img18", "img63", "img65"}
 TYPES = [
-    dict(type="F1", rq="RQ1", title="Find a bill from a specific month", kind="open",
-         A=("Find and open the electricity bill from July 2024 for Rs 10,510.", {"img62"}),
-         B=("Find and open the electricity bill from August 2025 for Rs 9,311.", {"img60"})),
-    dict(type="S1", rq="RQ3", title="Surface what matters", kind="fav",
-         A=("Mark two different photos with a heart (♥): the electricity bill and the internet bill that need paying.", {"img10", "img11"}),
-         B=("Mark two different photos with a heart (♥): the HCI assignment notice and the Tech Fest poster.", {"img13", "img18"})),
-    dict(type="C1", rq="RQ2", title="Clean up", kind="clean", only="PixelSense",
-         A=("Free up space: remove at least 5 blurry photos.", {"img06", "img38", "img39", "img40", "img41", "img42", "img43"}),
-         B=("Free up space: remove at least 5 memes or joke screenshots.", {"img73", "img74", "img75", "img76", "img101", "img102", "img103", "img104"})),
+    dict(type="F1", rq="RQ1", title="Find one bill among several from the same month", kind="open",
+         A=("Find and open the gas bill from October 2026.", {"img101"}),
+         B=("Find and open the water bill from August 2025.", {"img105"})),
+    dict(type="S1", rq="RQ3", title="Heart two photos", kind="fav",
+         A=("Mark with a heart (\u2665) the electricity bill from October 2026 and the internet bill from October 2026.", {"img10", "img11"}),
+         B=("Mark with a heart (\u2665) the assignment notice and the Tech Fest poster.", {"img13", "img18"})),
+    dict(type="E1", rq="RQ4", title="Edit a photo (black and white + square crop)", kind="edit",
+         A=("Find the photo of the snow-capped mountains. Make it black and white and crop it to a square, then save it as a copy.", {"img68"}),
+         B=("Find the photo of the green valley in Naran. Make it black and white and crop it to a square, then save it as a copy.", {"img80"}),
+         ps_hint=" Use edit by prompt."),
 ]
-# E1: the same edit (black and white, saved as a copy) in both versions, on a different photo in each. Where the photo is differs per version, so
-# nobody learns its position; PixelSense asks them to use Edit with a prompt, the Gallery leaves them to find the manual editor.
-EDIT_TYPE = dict(type="E1", rq="RQ4", title="Edit a photo: crop and black and white", kind="bw",
-                 A=dict(subject="a photo of the beach at sunset", targets={"img22", "img36", "img49", "img99", "img100"}),
-                 B=dict(subject="a photo of a tiger", targets={"img56", "img96"}))
-BEACH_IDS = EDIT_TYPE["A"]["targets"]          # kept for older code
-
-# Core photo-app tasks. Most exist in both conditions, because the Gallery baseline is modelled on Google Photos and a real gallery app has
-# them: Favorites (heart), Recently deleted and restore, Albums (add photos from inside the album) and the editor (Crop).
-# Each task is worded per condition (text_base) so it names what that app actually calls things. Tasks with no Google Photos equivalent
-# (edit by prompt, faces, bills, deadlines, AI control) are PixelSense only.
+# Tasks that are the same for every participant. text_base is the wording for the Gallery; ps_targets / base_targets differ where the task
+# is "a different photo in each version".
 CORE = [
-    dict(id="M1", rq="RQ6", title="Delete and restore (trash)", kind="restore", targets={"img53", "img54"}, both=True,
-         text="Remove one photo of the chocolate cake, then bring it back.",
-         text_base="Delete one photo of the chocolate cake, then restore it from Recently deleted."),
-    dict(id="M2", rq="RQ6", title="Make an album, then add to it", kind="album", targets=set(), both=True,
-         text="Create a new collection called Trip with one photo in it, then add a second photo to the same collection.",
-         text_base="Create a new album called Trip with one photo in it, then add a second photo to the same album."),
-    # P1: the same idea in both versions. PixelSense: open a person's face group. Gallery: no face groups, so find Sara by looking and open 3 of her photos.
-    dict(id="P1", rq="RQ6", title="Find photos of a person", kind="face", targets={"bro"}, both=True,
-         text="Use the face groups (People) to show all the photos of Person 1.",
-         kind_base="open3", targets_base={"img92", "img93", "img94"},
-         text_base="Find photos of Sara and open three of them.", person_base="sara"),
-    dict(id="X1", rq="RQ6", title="Make a collection from search results", kind="searchcoll", targets=set(), both=False,
-         text="Search for photos of the beach, then make a collection from the results."),
-    dict(id="P2", rq="RQ5", title="Stay in control of AI", kind="control", targets=set(), both=False,
-         text="Choose any one photo and stop the app’s AI from using it."),
+    dict(id="P1", rq="RQ6", title="Find a person in a setting (face groups)", kind="open",
+         text="Find the photo where you are wearing a pink dress at the wedding venue hallway.",
+         text_base="Find the photo where Sara is hugging her little brother and sister in a park.",
+         targets={"img88"}, targets_base={"img94"}),
+    dict(id="M2", rq="RQ6", title="Collect the photos from a search", kind="collect", name="Posters", targets=POSTERS,
+         text="Search for the event posters and save them together as a new collection called Posters.",
+         text_base="Create a new collection called Posters and add all the event posters to it."),
+    dict(id="C1", rq="RQ2", title="Delete all the memes", kind="clean", targets=MEMES,
+         text="Free up space: delete all the memes (joke screenshots).",
+         text_base="Free up space: delete all the memes (joke screenshots)."),
+    dict(id="M1", rq="RQ6", title="Delete and restore (trash)", kind="restore", targets={"img53", "img54"},
+         text="Delete one photo of the chocolate cake, then bring it back from Trash.",
+         text_base="Delete one photo of the chocolate cake, then restore it from Recently Deleted (inside Collections)."),
 ]
-# Removed on request: the crop-only task (now part of the edit task), "mark the bill as paid" and "add a reminder".
-CLEAN_MIN, CLEAN_MIN_CORRECT = 5, 4
+TASK_ORDER = ["F1", "S1", "P1", "M2", "E1", "C1", "M1"]
 
 
 def sets_for(pid: str) -> dict:
@@ -89,24 +75,14 @@ def sets_for(pid: str) -> dict:
 
 def tasks_for(cond: str, set_letter: str) -> list:
     base = cond != "PixelSense"
-    out = []
+    out = {}
     for t in TYPES:
-        if base and t.get("only") == "PixelSense":
-            continue                               # no blurry-photo clean-up task in the Gallery baseline
-        sl = "A" if t["type"] == "C1" else set_letter      # PixelSense always gets the blurry-photos version
-        out.append(dict(id=t["type"], task_set=sl, rq=t["rq"], title=t["title"], kind=t["kind"], text=t[sl][0], targets=t[sl][1]))
-    e = EDIT_TYPE
-    subj, tg = e[set_letter]["subject"], e[set_letter]["targets"]
-    text = (f"Edit a photo: search for {subj}, then use Edit with a prompt to crop it and make it black and white, and save it as a copy." if not base
-            else f"Edit a photo: find {subj}, crop it, make it black and white and save it as a copy.")
-    out.append(dict(id=e["type"], task_set=set_letter, rq=e["rq"], title=e["title"], kind=e["kind"], text=text, targets=tg))
+        text = t[set_letter][0] + ("" if base else t.get("ps_hint", ""))
+        out[t["type"]] = dict(id=t["type"], task_set=set_letter, rq=t["rq"], title=t["title"], kind=t["kind"], text=text, targets=t[set_letter][1])
     for c in CORE:
-        if base and not c["both"]:
-            continue
-        out.append(dict(id=c["id"], task_set="-", rq=c["rq"], title=c["title"], kind=c.get("kind_base", c["kind"]) if base else c["kind"],
-                        person=c.get("person_base") if base else None,
-                        targets=c.get("targets_base", c["targets"]) if base else c["targets"], text=c["text_base"] if base else c["text"]))
-    return out
+        out[c["id"]] = dict(id=c["id"], task_set="-", rq=c["rq"], title=c["title"], kind=c["kind"], name=c.get("name", ""),
+                            text=c["text_base"] if base else c["text"], targets=c.get("targets_base", c["targets"]) if base else c["targets"])
+    return [out[k] for k in TASK_ORDER]
 
 
 AGE_RANGES = ["18-22", "23-27", "28-35", "36+"]
@@ -114,7 +90,7 @@ PHOTO_COUNTS = ["Under 500", "500 to 2,000", "2,000 to 10,000", "Over 10,000"]
 SEARCH_FREQ = ["Never", "A few times a year", "Monthly", "Weekly or more"]
 
 
-# Short SUS, the same 5 statements for both versions. Original SUS items 4, 8, 9 and 10 (needing technical support, cumbersome, confident,
+# Short SUS, the same 5 statements for both versions, answered once for each version in the single comparison survey at the end. Original SUS items 4, 8, 9 and 10 (needing technical support, cumbersome, confident,
 # needed to learn a lot) overlapped with each other and with the others, and item 3 ("easy to use") mirrored item 2 ("unnecessarily complex"),
 # so they are dropped. Kept: SUS 1, 2, 5, 6, 7. (text, positively worded?)  Workload (NASA-TLX), UEQ-S and trust items were removed to keep the
 # survey short; the per-task SEQ and the final questions still cover effort and preference.
@@ -126,6 +102,11 @@ SUS_ITEMS = [
     ("I would imagine that most people would learn to use this system very quickly.", True),
 ]
 SUS_N = len(SUS_ITEMS)
+
+# Every choice carries its own words, so it is always clear which end is which.
+SEQ_LABELS = {1: "1 - Very difficult", 2: "2 - Difficult", 3: "3 - Slightly difficult", 4: "4 - Neither easy nor difficult",
+              5: "5 - Slightly easy", 6: "6 - Easy", 7: "7 - Very easy"}
+AGREE_LABELS = {1: "1 - Strongly disagree", 2: "2 - Disagree", 3: "3 - Neutral", 4: "4 - Agree", 5: "5 - Strongly agree"}
 
 
 def sus_score(answers: list[int]) -> float:
@@ -144,11 +125,24 @@ def counterbalance(pid: str) -> str:
 
 TASK_FIELDS = ["timestamp", "participant", "order", "condition", "task_id", "task_set", "rq", "seconds", "outcome", "success", "wrong_actions",
                "photos_opened", "searches", "undos", "screens_visited", "seq"]
-Q_FIELDS = ["timestamp", "participant", "condition"] + [f"sus_{i + 1}" for i in range(SUS_N)] + ["sus_score", "edit_prompt_pref"]
+Q_FIELDS = ["timestamp", "participant", "condition"] + [f"sus_{i + 1}" for i in range(SUS_N)] + ["sus_score"]
 PARTICIPANT_FIELDS = ["timestamp", "participant", "order", "task_sets", "age_range", "photos_kept", "search_freq"]
-FINAL_FIELDS = ["timestamp", "participant", "preferred", "easiest", "most_useful", "most_confusing", "would_use"]
-USEFUL_FEATURES = ["Asking in plain words (search)", "Overdue and Coming up", "Clean up", "Edit with a prompt", "People (face groups)",
-                   "Making a collection from search results", "Stopping the AI from using a photo"]
+# The last form, after both versions. Each question is a multiple choice; edit the wording or the options here and the form follows.
+# kind: "radio" (one answer). {v1} / {v2} in the options are replaced with the two version names in the order the participant used them.
+FINAL_FORM = [
+    dict(key="easier_find", text="Which version made it easier to find a specific photo (a bill, a person)?", options=["PixelSense", "Gallery", "No difference"]),
+    dict(key="faster_cleanup", text="Which version was quicker for deleting the memes?", options=["PixelSense", "Gallery", "No difference"]),
+    dict(key="easier_collect", text="Which version made it easier to put photos together in a collection?", options=["PixelSense", "Gallery", "No difference"]),
+    dict(key="prompt_vs_manual", text="Compared with editing by hand, how likely are you to use edit by prompt?",
+         options=["Much more likely", "A little more likely", "About the same", "A little less likely", "Much less likely", "I did not try it"]),
+    dict(key="more_likely_use", text="Which version are you more likely to use for your own photos?", options=["PixelSense", "Gallery", "Both equally", "Neither"]),
+    dict(key="would_use", text="Would you use PixelSense on your own photos?", options=["Yes", "Maybe", "No"]),
+    dict(key="most_useful", text="Which PixelSense feature did you find most useful?",
+         options=["Search results under the search bar", "Coming up (bills and deadlines)", "Face groups (People)", "Edit by prompt",
+                  "Saving search results as a collection", "Clean up", "None of them"]),
+    dict(key="most_confusing", text="Which version had the part you found most confusing?", options=["PixelSense", "Gallery", "Neither"]),
+]
+FINAL_FIELDS = ["timestamp", "participant"] + [q["key"] for q in FINAL_FORM] + ["comment"]
 
 
 def _webhook_url():
@@ -233,5 +227,5 @@ def next_pid() -> str:
 
 
 def order_for(pid: str) -> list[str]:
-    """Everyone does the Gallery (baseline) first, then PixelSense: the baseline is what people already know, so it is the reference."""
+    """Everyone does the Gallery (baseline) first, then PixelSense. The order is fixed, so say in the report that order effects are not cancelled out."""
     return [CONDITIONS[1], CONDITIONS[0]]

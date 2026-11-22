@@ -117,7 +117,19 @@ ROMAN = {"gulabi": "pink", "kala": "black", "kaala": "black", "safed": "white", 
 def normalize_query(q):
     """Roman-Urdu words people mix into English searches (gulabi, tasveer, dawat...) become their English meaning."""
     q = re.sub(r"\bmeri\s+(?:tasveer|tasvir|tasveeren|tasaweer)\b", "photos of me", q, flags=re.I)
-    return re.sub(r"[A-Za-z]+", lambda m: ROMAN.get(m.group(0).lower(), m.group(0)), q)
+    return re.sub(r"[A-Za-z]+", lambda m: ROMAN.get(m.group(0).lower()) or _fix_typo(m.group(0)), q)
+
+
+_INTENT_WORDS = ["deadline", "assignment", "electricity", "internet", "amount", "poster", "posters", "birthday", "passport", "payment", "invoice"]
+
+
+def _fix_typo(w):
+    """A misspelt key word (\"deadlne\") is read as the word it was meant to be, so the question is still answered, not just matched."""
+    lw = w.lower()
+    if len(lw) < 6 or lw in _INTENT_WORDS:
+        return w
+    near = difflib.get_close_matches(lw, _INTENT_WORDS, n=1, cutoff=0.84)
+    return near[0] if near else w
 
 
 def _vocab():
@@ -478,7 +490,7 @@ def answer_find(ctx, q, allow_count=True):  # noqa: C901
     is_count = bool(re.search(r"\bhow many\b|\bcount\b|\bnumber of\b", low))
     is_who = bool(re.search(r"\bwho\b|\bwhos\b|\bwho's\b|\bwhich people\b", low))
     is_time = bool(re.search(r"\bwhat time\b|\bat what time\b", low))
-    is_when = bool(re.search(r"^when\b|\bwhen is\b|\bwhat (day|date)\b|\bdue date\b|\bdeadline\b.*\?|\bwhen are\b", low))
+    is_when = bool(re.search(r"^when\b|\bwhen is\b|\bwhat (day|date)\b|\bdue date\b|\bdeadline\b|\bwhen are\b", low))
     is_money = bool(re.search(r"\bhow much\b|\bprice\b|\bcost\b|\btotal\b|\bamount\b|\bbalance\b|\bbill\b.*\b(due|is)\b|\b(pay|owe|payable)\b", low))
 
     content = [t for t, o in search_terms(rest).items() if o is None]

@@ -48,6 +48,8 @@ if len(w) >= 3 and stats is not None and (w["PixelSense"] - w["Gallery (baseline
     print(f"H3: short SUS PixelSense {w['PixelSense'].mean():.1f} vs Gallery {w['Gallery (baseline)'].mean():.1f} (n={len(w)} pairs), Wilcoxon p={stats.wilcoxon(w['PixelSense'], w['Gallery (baseline)']).pvalue:.3f}")
 if (D / "final.csv").exists():
     f = pd.read_csv(D / "final.csv")
-    print("\nPreferred version:\n", f["preferred"].value_counts().to_string())
-    print("\nWould use PixelSense (H4):\n", f["would_use"].value_counts().to_string())
-    print("\nFree-text answers for thematic coding saved in final.csv (columns easiest, most_confusing).")
+    import study as _ST
+    for q in _ST.FINAL_FORM:
+        if q["key"] in f.columns:
+            print(f"\n{q['text']}\n", f[q["key"]].value_counts().to_string())
+    print("\nFree-text comments are in final.csv (column comment).")

@@ -1182,95 +1182,128 @@ CSS = CSS + r"""
 CSS = CSS + r"""
 .att-sum.over{border-left:4px solid #D6455D}
 """
-
 CSS = CSS + r"""
-@media (max-width:520px){.st-key-actionbar button{padding-left:4px!important;padding-right:4px!important;font-size:13px!important}.st-key-actionbar [data-testid="stHorizontalBlock"]{gap:6px!important}}
-.st-key-danger_rm button,.st-key-danger_rm button p{color:#B3261E!important}
+/* ===== PixelSense shell: bottom bar on every screen size, one header style, no sidebar ===== */
+[data-testid="stMainBlockContainer"]{max-width:960px!important;padding-bottom:112px!important}
+.st-key-appbar [data-testid="stColumn"]:first-child{display:flex!important;flex:1 1 auto!important;width:auto!important;min-width:0!important}
+.st-key-appbar [data-testid="stColumn"]:last-child{flex:0 0 52px!important;width:52px!important;min-width:52px!important}
+[class*="st-key-topbar_"]{margin:6px 0 12px!important}
+[class*="st-key-topbar_"] [data-testid="stHorizontalBlock"]{align-items:center;gap:8px;flex-wrap:nowrap}
+[class*="st-key-topbar_"] [data-testid="stColumn"]:first-child{flex:0 0 46px!important;width:46px!important;min-width:46px!important}
+.st-key-psnav,.st-key-psbar{position:fixed!important;left:0!important;right:0!important;bottom:0!important;top:auto!important;width:100vw!important;max-width:none!important;
+  transform:none!important;z-index:900;background:#fff!important;border:0!important;border-top:1px solid #E4E6F1!important;border-radius:0!important;margin:0!important;
+  box-shadow:0 -6px 20px rgba(27,29,58,.06)!important;padding:4px 8px calc(6px + env(safe-area-inset-bottom))!important}
+.st-key-psnav [data-testid="stHorizontalBlock"],.st-key-psbar [data-testid="stHorizontalBlock"]{max-width:720px;margin:0 auto;gap:0!important;flex-wrap:nowrap!important}
+.st-key-psnav [data-testid="stColumn"],.st-key-psbar [data-testid="stColumn"]{flex:1 1 0!important;min-width:0!important;width:auto!important}
+.ps-nv,.ps-act{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px;color:#6B6F8C;font-size:12px;font-weight:650;position:relative;line-height:1.1}
+.ps-nv.on{color:#4F46C6}
+.ps-act.on{color:#D6455D}
+.ps-nv em{position:absolute;top:2px;left:calc(50% + 6px);background:#4F46C6;color:#fff;font-style:normal;font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px}
+.st-key-sidebar,.st-key-drawer{display:none!important}
+
+/* ===== Home: heading, search bar, results, Coming up ===== */
+.st-key-homesearch [data-testid="stHorizontalBlock"]{gap:8px!important;align-items:center;flex-wrap:nowrap!important}
+.st-key-homesearch [data-testid="stColumn"]:last-child{flex:0 0 52px!important;width:52px!important;min-width:52px!important}
+.st-key-homesearch input{height:50px!important;border-radius:14px!important;font-size:15.5px!important}
+.st-key-homesearch_btn button{height:50px!important;width:52px!important;min-width:52px!important;padding:0!important;border-radius:14px!important;background:#4F46C6!important;border:0!important;color:#fff!important}
+.st-key-homesearch_btn button p{display:none!important}
+.st-key-homesearch_btn button span,.st-key-homesearch_btn button svg{color:#fff!important;font-size:24px!important}
+.res-head{font-size:14px;color:#6B6F8C;padding:8px 0 2px;line-height:1.3}
+.res-head b{color:#1B1D3A}
+.ans{display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid #E4E6F1;border-radius:16px;padding:12px 14px;margin:6px 0 12px}
+.ans .av-ai{flex:0 0 30px;width:30px;height:30px;border-radius:50%;background:#4F46C6;display:flex;align-items:center;justify-content:center}
+.ans-t{font-size:15px;line-height:1.5;color:#1B1D3A;min-width:0;overflow-wrap:anywhere}
+.st-key-sm_clear button,.st-key-sm_savecoll button{min-height:38px!important;width:auto!important;padding:0 14px!important;border-radius:999px!important;font-size:13.5px!important;font-weight:650!important}
+.st-key-sm_clear{display:flex;justify-content:flex-end}
+.st-key-sm_savecoll{margin:10px 0 4px}
+.st-key-sm_savecoll button{background:#EEEBFF!important;color:#4F46C6!important;border:1px solid #D9D4FA!important}
+[class*="st-key-tap_att_"] .upc{display:flex;align-items:center;gap:12px;padding:12px 14px;margin:0 0 10px}
+.att-thumb{width:52px;height:52px;object-fit:cover;border-radius:10px;flex:0 0 52px;display:block}
+@media (max-width:480px){.att-thumb{display:block!important}}
+
+/* ===== Photo screen ===== */
+.st-key-stack_detail{gap:14px!important}
+.hero-img{position:relative;border-radius:16px;overflow:hidden;background:#12132A;display:flex;justify-content:center;align-items:center}
+.hero-img img{width:100%;max-height:60vh;object-fit:contain;display:block}
+.dtitle{font-size:20px;font-weight:700;line-height:1.25;color:#1B1D3A}
+.dcat{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E4E6F1;border-radius:14px;padding:11px 14px;margin:12px 0}
+.dcat span{font-size:12px;color:#6B6F8C;font-weight:650}
+.dcat b{flex:1;font-size:15px;color:#1B1D3A}
+.dcat i{font-style:normal;font-size:12px;color:#4F46C6;background:#EEEBFF;padding:3px 10px;border-radius:999px;font-weight:650}
+
+/* ===== Gallery editor: filters you can see ===== */
+.bl-filt{border:3px solid transparent;border-radius:12px;text-align:center;font-size:13px;color:#3c4043;padding:2px 2px 6px}
+.bl-filt img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;border-radius:9px;margin-bottom:4px}
+.bl-filt.on{border-color:#1a8fd1;color:#1a8fd1;font-weight:600}
+
+/* ===== Streamlit's own chrome stays out of the way ===== */
+[data-testid="stToolbar"],[data-testid="stAppDeployButton"],[data-testid="stStatusWidget"],[data-testid="stDecoration"],.stAppDeployButton,.stDeployButton,
+[class*="viewerBadge"],[class*="_viewerBadge"],[class*="_profileContainer"],[class*="_terminalButton"],[class*="githubIcon"],[class*="GithubIcon"],
+[data-testid="manage-app-button"],[data-testid="appCreatorAvatar"]{display:none!important;visibility:hidden!important}
 """
 
 CSS = CSS + r"""
-.st-key-link_clrsearch,.st-key-link_clrsearch>div,.st-key-link_clrsearch [data-testid="stVerticalBlock"]{width:100%!important;align-items:flex-end!important}
-.st-key-link_clrsearch [data-testid="stElementContainer"],.st-key-link_clrsearch [data-testid="stButton"],.st-key-link_clrsearch .stButton{display:flex!important;justify-content:flex-end!important;width:100%!important}
-.st-key-link_clrsearch button{width:auto!important;padding:0 2px!important;margin-left:auto!important}
-img.me,.me{width:80px!important;height:80px!important;min-width:80px!important;flex:none!important}
-.st-key-appbar [data-testid="stHorizontalBlock"]{align-items:center!important}
-.st-key-ed_filters_box [data-testid="stRadio"] [role="radiogroup"]{gap:6px;flex-wrap:wrap}
-.st-key-ed_filters_box [data-testid="stRadio"] label{padding:7px 12px;border-radius:999px;width:auto;white-space:nowrap;word-break:normal;writing-mode:horizontal-tb}
-.st-key-ed_filters_box [data-testid="stRadio"] label *{white-space:nowrap!important;word-break:normal!important;writing-mode:horizontal-tb!important}
+/* ===== Welcome: one static screen (no scrolling) that fits any phone or laptop; sizes follow the window height ===== */
+.st-key-stack_wel{margin-bottom:0!important}
+.st-key-stack_wel .wel-h{font-size:clamp(28px,4.6dvh + 1.2vw,52px)!important;line-height:1.1!important;margin:clamp(12px,3dvh,28px) 0 8px!important;max-width:560px}
+.wel-sub{font-size:clamp(14px,1.9dvh + .4vw,18px);line-height:1.5;color:#5E627F;max-width:500px;margin:0 0 6px}
+.wel-pills{display:flex;flex-wrap:wrap;gap:8px;margin:clamp(8px,2dvh,16px) 0 clamp(8px,2dvh,18px)}
+.wel-pills span{background:rgba(91,79,214,.11);color:#4F46C6;font-weight:650;font-size:13px;padding:6px 13px;border-radius:999px}
+.st-key-wel_start .stButton>button{min-width:190px;min-height:50px}
+.mos-d{grid-template-rows:repeat(2,clamp(110px,25dvh,240px))!important}
+.mos-m{display:none!important}
+@media (min-width:768px){.st-key-stack_wel{min-height:min(560px,calc(100dvh - 24px));display:flex;flex-direction:column;justify-content:center}}
 @media (max-width:767px){
-  .st-key-ed_filters_box [data-testid="stRadio"] [role="radiogroup"]{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px!important}
-  .st-key-ed_filters_box [data-testid="stRadio"] label{width:100%!important;min-width:0;justify-content:center;padding:8px 4px;font-size:12.5px;text-align:center;box-sizing:border-box}
-  .st-key-ed_filters_box [data-testid="stRadio"] label>div:first-child{display:none!important}
+  .st-key-stack_wel [data-testid="stColumn"]:last-child{display:none!important}
+  .st-key-stack_wel{padding:clamp(16px,3dvh,26px) 20px!important;border-radius:26px!important}
+  .st-key-stack_wel [data-testid="stHorizontalBlock"]{gap:0!important}
+  .mos.mos-m{display:grid!important;grid-template-columns:1fr 1fr 1fr;grid-template-rows:repeat(2,clamp(60px,13dvh,118px));gap:8px;margin:clamp(8px,2dvh,16px) 0 clamp(10px,2.4dvh,18px)}
+  .mos.mos-m .m{border-radius:14px;border-width:2px}
+  .st-key-wel_start .stButton>button{width:100%}
 }
-@media (min-width:768px){
-  [class*="st-key-att_img"]:has(.att-big),[class*="st-key-att_m"]:has(.att-big){max-width:560px}
-  .att-big .att-pic{aspect-ratio:16/8;max-height:230px}
-  .att-big .rtitle{font-size:15.5px}
-}
-"""
+@media (max-height:640px){.mos.mos-m{display:none!important}}
 
-CSS = CSS + r"""
-.tface{border-radius:50%;object-fit:cover;border:3px solid #fff;box-shadow:0 6px 18px rgba(31,33,64,.22);display:block}
-.tface-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:14px}
-.sb-row{display:flex;align-items:center;gap:12px;min-width:0}
-.sb-row .tface{flex:none;border-width:2px}
-"""
+/* ===== Rating scale after each task: every choice has words, so it is clear which end is easy and which is difficult ===== */
+.st-key-seqbox{background:#fff;border-radius:16px;padding:14px 16px 10px;box-shadow:0 1px 2px rgba(31,33,64,.04),0 6px 18px rgba(31,33,64,.06)}
+.seq-q{font-size:17px;font-weight:700;color:#1F2140;line-height:1.3}
+.seq-hint{font-size:13.5px;color:#5E627F;margin:4px 0 10px}
+.seq-hint b{color:#1F2140}
+.st-key-seqbox [data-testid="stRadio"] [role="radiogroup"]{display:flex!important;flex-direction:column!important;gap:6px!important}
+.st-key-seqbox [data-testid="stRadio"] label{width:100%!important;box-sizing:border-box;padding:11px 14px!important;border:1px solid #E4E6F1!important;border-radius:12px!important;background:#fff!important;margin:0!important}
+.st-key-seqbox [data-testid="stRadio"] label:has(input:checked){background:#EEEBFF!important;border-color:#5B4FD6!important}
+.st-key-seqbox [data-testid="stRadio"] label p{font-size:15px!important;font-weight:600!important;color:#1F2140!important}
 
-CSS = CSS + r"""
-/* ---------- fixes: phone action bar, Deselect all, task-bar text, prompt row, search-result ticks ---------- */
-.edlbl{font-size:14px;font-weight:700;color:#1F2140;margin:0 0 6px}
-.st-key-ed_prompt_box [data-testid="stHorizontalBlock"]:first-of-type{align-items:stretch!important}
-.st-key-ed_prompt_box .stButton>button{min-height:54px!important;height:54px!important;margin-top:0!important}
-.st-key-stack_edit .st-key-chips_edit [data-testid="stHorizontalBlock"]{display:flex!important;flex-wrap:wrap!important;gap:8px!important}
-.st-key-stack_edit .st-key-chips_edit [data-testid="stColumn"]{flex:0 0 auto!important;width:auto!important;min-width:0!important}
-@media (max-width:767px){
-  .st-key-stack_edit .st-key-chips_edit [data-testid="stColumn"]{flex:1 1 calc(50% - 8px)!important;width:calc(50% - 8px)!important}
-  .st-key-chips_edit .stButton>button{width:100%!important;min-height:38px;white-space:nowrap}
-  .st-key-ed_prompt_box [data-testid="stHorizontalBlock"]:first-of-type{flex-wrap:nowrap!important;gap:10px!important}
-  [data-testid="stColumn"]:has(.st-key-blh_selall){flex:0 0 auto!important;width:auto!important;min-width:max-content!important}
-  [class*="st-key-blh_selall"] button{white-space:nowrap!important;padding:0 4px!important;font-size:13.5px!important}
-  .sb-t b.t1{font-size:13px}.sb-t b.t2{font-size:12px}.sb-t b.t3{font-size:11px}.sb-t b.t4{font-size:10.5px}
-  .sb-t b{line-height:1.15}.sb-t span{font-size:10.5px;line-height:1.2}
-  .st-key-studybar{padding:0 12px!important}
-}
-@media (min-width:768px){.sb-t b.t3{font-size:13px}.sb-t b.t4{font-size:12px}}
-.sb-t{overflow:hidden;max-height:calc(var(--sbh) - 8px)}
+/* ===== One comparison survey ===== */
+.cmp-q{font-weight:700;font-size:15px;color:#1F2140;line-height:1.35;margin:14px 0 4px}
+
+/* ===== Photo picker (add photos), photo screen controls ===== */
+.pk-prev{background:#12132A;border-radius:14px;display:flex;align-items:center;justify-content:center;height:min(52dvh,520px);overflow:hidden}
+.pk-prev img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.pk-count{font-size:13px;color:#6B6F8C;margin:8px 0 6px;line-height:1.4}
+.pk-count b{color:#1F2140}
+[class*="st-key-pkgrid_"] [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:8px!important;margin-bottom:8px}
+[class*="st-key-pkgrid_"] [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important}
+[class*="st-key-pkctl_"] [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:8px!important;align-items:center}
+[class*="st-key-pkctl_"] [data-testid="stColumn"]{min-width:0!important}
+@media (max-width:480px){.pk-prev{height:44dvh}}
+
+/* ===== Collection actions, Trash buttons ===== */
+.st-key-coll_actions [data-testid="stHorizontalBlock"]{gap:10px!important;flex-wrap:nowrap!important}
+.st-key-coll_actions [data-testid="stColumn"]{flex:0 0 auto!important;width:auto!important;min-width:0!important}
+.st-key-coll_actions .stButton>button{min-height:44px;width:auto;padding:0 18px;border-radius:999px;white-space:nowrap}
+.st-key-trashbar [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:10px!important}
+.st-key-trashbar [data-testid="stColumn"]{min-width:0!important}
+.st-key-trashbar .stButton>button{width:100%;min-height:46px;border-radius:14px;white-space:nowrap}
+.st-key-trashbar{margin:6px 0 12px}
+
+/* ===== Six items in the bottom bar fit on a small phone ===== */
 @media (max-width:520px){
-  .st-key-actionbar{padding:10px 8px 14px!important}
-  .st-key-actionbar [data-testid="stHorizontalBlock"]{gap:5px!important;flex-wrap:nowrap!important}
-  .st-key-actionbar [data-testid="stColumn"]{min-width:0!important;flex:1 1 0!important;width:auto!important}
-  .st-key-actionbar [data-testid="stColumn"]:first-child{flex:0 0 46px!important;width:46px!important;min-width:46px!important}
-  .st-key-actionbar button{padding-left:2px!important;padding-right:2px!important;font-size:12px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .st-key-psnav{padding:4px 2px calc(6px + env(safe-area-inset-bottom))!important}
+  .ps-nv{font-size:10px;padding:7px 0;gap:2px}
+  .ps-nv svg{width:22px;height:22px}
+  .ps-nv em{left:calc(50% + 4px);font-size:9px;padding:1px 5px}
 }
-"""
 
-CSS = CSS + r"""
-@media (max-width:520px){
-  .st-key-actionbar [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;row-gap:8px!important}
-  .st-key-actionbar [data-testid="stColumn"],.st-key-actionbar [data-testid="stColumn"]:first-child{flex:1 1 calc(33.33% - 8px)!important;width:auto!important;min-width:0!important}
-  .st-key-actionbar button{font-size:13px!important;min-height:44px}
-  .st-key-stack_detail{padding-bottom:84px}
-}
-"""
-
-CSS = CSS + r"""
-/* photo-detail action bar: five equal-looking buttons in one row; on a phone Edit, Move to and Delete show only their symbol */
-.st-key-actionbar .stButton>button{border:1.5px solid #E7E8F2!important;background:#fff!important;color:#1F2140!important;box-shadow:none!important;font-weight:700}
-.st-key-actionbar .st-key-danger_rm button{color:#B3261E!important;border-color:#F3C9CD!important}
-.st-key-actionbar .st-key-danger_rm button *{color:#B3261E!important}
-@media (max-width:520px){
-  .st-key-actionbar{padding:10px 8px 14px!important}
-  .st-key-actionbar [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:6px!important;row-gap:0!important}
-  .st-key-actionbar [data-testid="stColumn"],.st-key-actionbar [data-testid="stColumn"]:first-child{flex:1 1 0!important;width:auto!important;min-width:0!important}
-  .st-key-actionbar [data-testid="stColumn"]:nth-child(4){flex:1.9 1 0!important}
-  .st-key-actionbar button{min-height:46px!important;padding:0 4px!important;font-size:13px!important;justify-content:center}
-  .st-key-d_edit button p,.st-key-d_move button p,.st-key-d_remove button p{display:none!important}
-  .st-key-d_edit button,.st-key-d_move button,.st-key-d_remove button{gap:0!important}
-  .st-key-stack_detail{padding-bottom:72px}
-}
-"""
-
-CSS = CSS + r"""
-.st-key-actionbar button [data-testid="stIconMaterial"]{font-size:25px!important;font-variation-settings:'FILL' 0,'wght' 600,'GRAD' 0,'opsz' 24!important}
-.st-key-favbtn_on button,.st-key-favbtn_off button{font-size:26px!important;line-height:1}
+/* ===== Gallery (baseline): Recently Deleted and Favorites rows inside Collections ===== */
+.bl-row{border-top:1px solid #f0f1f3;border-radius:0}
 """
