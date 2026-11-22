@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:transparent}</style></head>
+<body>
+<script>
+  // Invisible helper: lets a photo screen be swiped left / right (phone) or moved with the arrow keys (computer).
+  // It listens on the parent page, but only while the page contains an element marked data-swipe-zone (the photo viewer or the
+  // "add photos" preview). A swipe left means "next photo", a swipe right means "previous photo". Python gets {dir, n}.
+  function send(type, data) { window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data), "*"); }
+  var P = window.parent;
+  P.__psSwSend = function (dir) { send("streamlit:setComponentValue", { value: { dir: dir, n: Date.now() }, dataType: "json" }); };
+  if (!P.__psSwInstalled) {
+    P.__psSwInstalled = true;
+    var doc = P.document, sx = 0, sy = 0, t0 = 0, tracking = false;
+    function zoneActive() { return !!doc.querySelector("[data-swipe-zone]"); }
+    function blocked(t) {
+      return !!(t && t.closest && t.closest("button, input, textarea, select, a, [role='slider'], [data-baseweb='slider'], [data-testid='stSlider']"));
+    }
+    doc.addEventListener("touchstart", function (e) {
+      if (!zoneActive() || e.touches.length !== 1 || blocked(e.target)) { tracking = false; return; }
+      var t = e.touches[0];
+      sx = t.clientX; sy = t.clientY; t0 = Date.now(); tracking = true;
+    }, { passive: true, capture: true });
+    doc.addEventListener("touchend", function (e) {
+      if (!tracking) return;
+      tracking = false;
+      var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+      // a quick, mostly sideways flick of at least 60 px (so a normal scroll or a tap never counts)
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - t0 < 900) {
+        if (P.__psSwSend) P.__psSwSend(dx < 0 ? "next" : "prev");
+      }
+    }, { passive: true, capture: true });
+    doc.addEventListener("keydown", function (e) {
+      if (!zoneActive()) return;
+      var tag = (e.target && e.target.tagName) || "";
+      if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
+      if (e.key === "ArrowLeft") { if (P.__psSwSend) P.__psSwSend("prev"); }
+      else if (e.key === "ArrowRight") { if (P.__psSwSend) P.__psSwSend("next"); }
+    }, true);
+  }
+  window.addEventListener("message", function (ev) {
+    if (ev.data && ev.data.type === "streamlit:render") send("streamlit:setFrameHeight", { height: 0 });
+  });
+  send("streamlit:componentReady", { apiVersion: 1 });
+  send("streamlit:setFrameHeight", { height: 0 });
+</script>
+</body></html>
