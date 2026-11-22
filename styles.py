@@ -1348,3 +1348,12 @@ CSS = CSS + r"""
 [data-testid="stHorizontalBlock"]:has(.st-key-blh_selall){flex-wrap:nowrap!important;align-items:center}
 [data-testid="stColumn"]:has(.st-key-blhclose_sel){flex:0 0 auto!important;width:auto!important}
 """
+CSS = CSS + r"""
+/* survey: pick-several options look like the single-choice ones (white rounded cards, bold text, purple when ticked) */
+[class*="st-key-fin_box_"] [data-testid="stCheckbox"]{width:auto!important;max-width:100%!important;margin:0 0 8px!important}
+[class*="st-key-fin_box_"] [data-testid="stCheckbox"] label{display:inline-flex!important;align-items:center;gap:10px;background:#fff;border:1px solid #E4E6F1;
+  border-radius:12px;padding:11px 16px 11px 14px!important;margin:0!important;width:auto!important;max-width:100%;box-sizing:border-box;cursor:pointer}
+[class*="st-key-fin_box_"] [data-testid="stCheckbox"] label:has(input:checked){border-color:#5B4FD6;background:#F3F1FF}
+[class*="st-key-fin_box_"] [data-testid="stCheckbox"] label p{font-size:15px!important;font-weight:600!important;color:#1F2140!important;margin:0!important}
+[class*="st-key-fin_box_"] [data-testid="stCheckbox"] label>div:first-child{margin:0!important}
+"""
