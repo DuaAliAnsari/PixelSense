@@ -9,7 +9,7 @@ Navigation lives in the top-left corner menu; the prompt bar sits at the bottom 
 Journeys:
   A. Find / ask       type a request or question in the bottom bar -> answer with the photos and how it was found
   B. People           People -> tap a face -> every photo of that person (name them, hide them, fix mistakes)
-  C. Stay in control  Move to..., Stop AI, Pause AI per collection, face groups on/off, Undo for every change
+  C. Stay in control  Move to..., face groups on/off, Undo for every change
 """
 import base64
 import copy
@@ -63,6 +63,7 @@ ICONS = {
     "search": '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/>',
     "check": '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.4 2.4 4.6-5"/>',
     "shield": '<path d="M12 3 5 6v5.5c0 4.3 2.9 7.6 7 9.5 4.1-1.9 7-5.2 7-9.5V6z"/><path d="m9 12 2.2 2.2L15.5 10"/>',
+    "gear": '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
     "tick": '<path d="m6 12.5 4 4 8-9"/>',
     "sparkle": '<path d="M12 3c.6 4.2 2.8 6.4 7 7-4.2.6-6.4 2.8-7 7-.6-4.2-2.8-6.4-7-7 4.2-.6 6.4-2.8 7-7z"/>',
     "folder": '<path d="M3.5 7.5a2 2 0 0 1 2-2H9l2 2.2h7.5a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
@@ -111,7 +112,7 @@ S = st.session_state
 def fresh_state():
     return dict(
         view="welcome", back="chat", query="", rfilter="All", hfilter="All", sel=None, cur_coll=None, cur_person=None,
-        override={}, extra_cats=[], deleted_cats=set(), excluded_cats={"Sensitive"}, excluded_imgs=set(), removed=set(), arrived=set(),
+        override={}, extra_cats=[], deleted_cats=set(), excluded_cats=set(), excluded_imgs=set(), removed=set(), arrived=set(),
         names=dict(E.PRESET_NAMES), hidden_people=set(), notp=set(), faces_on=None, fav=set(), kept=set(), cur_mem=None, copies=[], copy_seq=0, llm_on=False,
         bl_view="photos", bl_albums={}, bl_back="photos", history=[], searches=[], done=set(), study=None, opened=set(), manual=[], manual_seq=0, analytics_on=False, events=[], snack=None, scroll=False, menu=False, plus=False, chat=[], res=None,
     )
@@ -770,44 +771,6 @@ def remove_dialog(i):
             st.rerun()
 
 
-@st.dialog("Stop AI using this photo?")
-def stop_ai_dialog(i):
-    r = R[i]
-    md(thumb_head(r, "") + '<div class="info"><p><b>What changes:</b> this photo leaves search, People and collections, and AI stops reading it.</p>'
-       '<p>Nothing is deleted and the original is never changed. Allow it again any time in Settings.</p></div>')
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Cancel", key=f"sa_cancel_{i}"):
-            st.rerun()
-    with c2:
-        if st.button("Stop AI", type="primary", key=f"sa_ok_{i}"):
-            snap()
-            S.excluded_imgs.add(i)
-            S.view = "chat"
-            notify("AI will no longer use that photo.")
-            st.rerun()
-
-
-@st.dialog("Pause AI for this collection?")
-def pause_cat_dialog(name):
-    n = cat_total(name)
-    md(f'<div class="info"><p><b>“{esc(name)}”</b> has {n} photo{"s" if n != 1 else ""}.</p>'
-       '<p><b>What changes:</b> they leave search, People and the timeline, and AI stops reading them. '
-       'They stay on your device and nothing is deleted.</p><p>Allow AI again any time in Settings.</p></div>')
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Cancel", key=f"pc_cancel_{slug(name)}"):
-            st.rerun()
-    with c2:
-        if st.button("Pause AI", type="primary", key=f"pc_ok_{slug(name)}"):
-            snap()
-            S.excluded_cats.add(name)
-            if S.view in ("collection", "detail"):
-                S.view = "collections" if S.view == "collection" else "chat"
-            notify(f"AI is paused for “{name}”.")
-            st.rerun()
-
-
 # ---- select & delete (Photos page and every collection) ---------------------------------------------
 def sel_key(scope, i):
     return f"sel_{scope}_{i}"
@@ -842,7 +805,7 @@ def select_grid(rows, prefix, scope, n=6, opener=None, extra=()):
                         st.checkbox(f"Select {r.description}", key=sel_key(scope, r.id), label_visibility="collapsed")
 
 
-def selection_bar(scope, rows, where, mode="library", all_ids=None):
+def selection_bar(scope, rows, where, mode="library", all_ids=None, select_all=False):
     """The bar above the photos: Delete all ticks every square; Delete selected asks for confirmation.
     Buttons sit at the right end (in line with the 'N photos' label), Clear to the left of Delete all.
     mode "library" (Photos, collections): Delete selected + Move to.  mode "cleanup": Delete selected + Remove from Cleanup bin."""
@@ -850,7 +813,8 @@ def selection_bar(scope, rows, where, mode="library", all_ids=None):
     every = list(all_ids) if all_ids is not None else ids       # what "Delete all" removes (search results also count the answer cards)
     picked = [i for i in ids if S.get(sel_key(scope, i))]
     second = ("selbin", None) if mode == "cleanup" else ("selmove", None)
-    show = ([("seldel", None), second, ("selclear", None)] if picked else []) + [("delall", None)]
+    # no Delete all anywhere: nothing ticked = no buttons; once something is ticked, Select all sits at the end of the row
+    show = [("seldel", None), second, ("selclear", None), ("selall", None)] if picked else []
     with st.container(key=f"selbar_{scope}"):
         cols = st.columns([1] + [0.01] * len(show))
         with cols[0]:
@@ -871,6 +835,8 @@ def selection_bar(scope, rows, where, mode="library", all_ids=None):
                             bin_out(picked, scope)
                 elif kind == "selclear":
                     st.button("Clear", key=f"selclear_{scope}", on_click=untick_all, args=(scope, ids))
+                elif kind == "selall":
+                    st.button("Select all", key=f"selall_{scope}", on_click=tick_all, args=(scope, ids), icon=":material/select_all:")
                 else:
                     if st.button("Delete all", key=f"delall_{scope}", icon=":material/delete:", disabled=not every):
                         delete_photos_dialog(every, scope, True, where)
@@ -2510,11 +2476,13 @@ def study_goto_part(part):
 
 
 def view_study():
+    sd = S.study
+    if not sd:                                   # before the study starts: a back arrow, in case someone came here by accident
+        topbar("Usability study", "home", "study")
+        snack_ui()
+        return study_intro()
     appbar("Usability study")
     snack_ui()
-    sd = S.study
-    if not sd:
-        return study_intro()
     ST.save_progress(sd)
     {"tasks": study_tasks_ui, "seq": study_seq, "survey": study_survey, "between": study_between, "final": study_final}.get(sd["step"], study_done)()
 
@@ -2589,7 +2557,7 @@ def study_final():
     names = ("Gallery", "PixelSense")
     conds = ("Gallery (baseline)", "PixelSense")
     with st.form("final_form"):
-        md('<div class="sect" style="margin-top:6px"><b>1. How did each version feel?</b></div>'
+        md('<div class="sect" style="margin-top:6px"><b>How did each version feel?</b></div>'
            '<div class="sub" style="margin-top:0">Pick a number for each. <b>1 = strongly disagree, 5 = strongly agree</b>.</div>')
         rated = {c: [] for c in conds}
         for i, q in enumerate(ST.SUS_ITEMS):
@@ -2601,16 +2569,19 @@ def study_final():
                     with col:
                         rated[c].append(st.selectbox(nm, [1, 2, 3, 4, 5], index=None, placeholder="Choose", format_func=lambda v: ST.AGREE_LABELS[v],
                                                      key=f"cmp_{'g' if nm == 'Gallery' else 'p'}_{i}"))
-        md('<div class="sect" style="margin-top:14px"><b>2. Which one was better?</b></div>')
+        md('<div class="sect" style="margin-top:14px"><b>Which one was better?</b></div>')
         ans = {}
-        for q in ST.FINAL_FORM:
+        n0 = len(ST.SUS_ITEMS)
+        for n, q in enumerate(ST.FINAL_FORM):
             with st.container(key=f"fin_box_{q['key']}"):
-                ans[q["key"]] = st.radio(q["text"], q["options"], index=None, key=f"fin_{q['key']}")
-        comment = st.text_area("Anything else you want to tell us? (optional)", key="fin_comment", height=90)
+                md(f'<div class="cmp-q">{n0 + n + 1}. {esc(q["text"])}</div>')
+                ans[q["key"]] = st.radio(q["text"], q["options"], index=None, key=f"fin_{q['key']}", label_visibility="collapsed")
+        md(f'<div class="cmp-q">{n0 + len(ST.FINAL_FORM) + 1}. Anything else you want to tell us? (optional)</div>')
+        comment = st.text_area("Anything else you want to tell us? (optional)", key="fin_comment", height=90, label_visibility="collapsed")
         submitted = st.form_submit_button("Finish", type="primary")
     if submitted:
-        missing = [f"1.{i + 1} ({n})" for n, c in zip(names, conds) for i, v in enumerate(rated[c]) if v is None]
-        missing += [f"2.{n + 1}" for n, q in enumerate(ST.FINAL_FORM) if ans[q["key"]] is None]
+        missing = [f"{i + 1} ({n})" for n, c in zip(names, conds) for i, v in enumerate(rated[c]) if v is None]
+        missing += [f"{len(ST.SUS_ITEMS) + n + 1}" for n, q in enumerate(ST.FINAL_FORM) if ans[q["key"]] is None]
         if missing:
             st.warning("Please answer: " + ", ".join(missing) + ".")
             return
@@ -2626,7 +2597,7 @@ def study_final():
 
 def study_done():
     sd = S.study
-    md(f'<div class="card pad glass info"><p><b>All done. Thank you, {esc(sd["pid"])}!</b></p><p>Your answers have been saved. You can hand the device back.</p></div>')
+    md(f'<div class="card pad glass info"><p><b>All done. Thank you, {esc(sd["pid"])}!</b></p><p>Your answers have been saved.</p></div>')
     with st.expander("Researcher: download data"):
         c1, c2 = st.columns(2)
         for col, name in zip((c1, c2), ("tasks.csv", "questionnaires.csv")):
@@ -2663,7 +2634,7 @@ def view_photos():
         empty_state("heart" if S.hfilter == "Favorites" else "image", "Nothing here yet",
                     "Tap the heart on a photo to add it here." if S.hfilter == "Favorites" else f"No {S.hfilter.lower()} photos that AI is allowed to use.")
         return
-    selection_bar("photos", rows, "Photos" if S.hfilter == "All" else f"Photos ({S.hfilter})")
+    selection_bar("photos", rows, "Photos" if S.hfilter == "All" else f"Photos ({S.hfilter})", select_all=True)
     groups = {}
     for r in sorted(rows, key=lambda r: (r.taken, r.id), reverse=True):
         d = E.taken_date(r)
@@ -3167,12 +3138,6 @@ def view_collections():
                       f'<div class="card crow pressable">{thumb}<div style="flex:1;min-width:0"><div class="rtitle" style="font-size:15.5px">{esc(name)}</div>'
                       f'<div class="ccount">{len(items)} item{"s" if len(items) != 1 else ""}</div></div><div class="chev">{svg("chev", 20)}</div></div>',
                       open_collection, name, f"Open {name}"))
-    paused = [c for c in all_cats() if c in S.excluded_cats]
-    if paused:
-        cards.append(("paused", f'<div class="card crow pressable"><div class="cthumb" style="background:#EEF0F6;color:#6B6F8C">{svg("eyeoff", 24)}</div>'
-                                f'<div style="flex:1;min-width:0"><div class="rtitle" style="font-size:15.5px">{len(paused)} paused for AI</div>'
-                                f'<div class="ccount">Manage in Settings</div></div><div class="chev">{svg("chev", 20)}</div></div>',
-                      go, "settings", "Open Settings"))
     with st.container(key="cards3_coll"):
         for k in range(0, len(cards), 3):
             cols = st.columns(3)
@@ -3241,7 +3206,7 @@ def view_collection():
             if st.button("Rename", key="coll_rename", icon=":material/edit:"):
                 rename_collection_dialog(name)
     if items:
-        selection_bar(f"c_{slug(name)}", items, f"“{name}”")
+        selection_bar(f"c_{slug(name)}", items, f"“{name}”", select_all=True)
         select_grid(items, "cg", f"c_{slug(name)}")
     else:
         empty_state("folder", "This collection is empty", "Tap Add photos to fill it.")
@@ -3249,10 +3214,6 @@ def view_collection():
     with st.container(key="danger_delcoll"):
         if st.button("Delete collection", key="coll_del"):
             delete_collection_dialog(name)
-    if name not in S.extra_cats:
-        with st.container(key="danger_pause"):
-            if st.button("Pause AI for this collection", key="coll_pause"):
-                pause_cat_dialog(name)
 
 
 # ---- settings ---------------------------------------------------------------------------------------------
@@ -3351,7 +3312,7 @@ def your_data_ui():
 
 def view_settings():
     appbar("Settings")
-    md('<div class="sub" style="margin-top:6px">Privacy, face groups and what AI is allowed to see.</div>')
+    md('<div class="sub" style="margin-top:6px">Privacy and face groups.</div>')
     snack_ui()
 
     md('<div class="sect" style="margin-top:6px"><b>Face groups</b></div>')
@@ -3393,34 +3354,6 @@ def view_settings():
                         S.hidden_people.discard(pid)
                         notify(f"{pname(pid)} is shown again.")
                         st.rerun()
-
-    md('<div class="sect" style="margin-top:16px"><b>AI access by collection</b></div>'
-       '<div class="sub" style="margin-top:0">Paused collections disappear from search, People and the timeline. Nothing is deleted.</div>')
-    for cat in all_cats():
-        off, n, k = cat in S.excluded_cats, cat_total(cat), slug(cat)
-        with st.container(key=f"row_{k}"):
-            c1, c2 = st.columns([3, 2])
-            with c1:
-                md(f'<div class="setrow" style="padding:4px 0;border:none"><span class="si {"off" if off else ""}">{svg("eyeoff" if off else "folder", 20)}</span>'
-                   f'<div><b>{esc(cat)}</b><small>{n} item{"s" if n != 1 else ""} · {"AI paused" if off else "AI allowed"}</small></div></div>')
-            with c2:
-                with st.container(key=f"sm_{k}"):
-                    if off:
-                        if st.button("Allow AI", key=f"on_{k}", type="primary"):
-                            snap()
-                            S.excluded_cats.discard(cat)
-                            notify(f"AI can use “{cat}” again.")
-                            st.rerun()
-                    elif st.button("Pause AI", key=f"off_{k}"):
-                        pause_cat_dialog(cat)
-    if "Sensitive" in all_cats():
-        md('<div class="sub" style="margin-top:0">“Sensitive” was paused automatically because those photos look private. You decide whether to allow it.</div>')
-
-    stopped = [R[i] for i in sorted(S.excluded_imgs, key=lambda x: int(x[3:]))]
-    if stopped:
-        md('<div class="sect" style="margin-top:16px"><b>Photos AI can’t use</b></div>')
-        for r in stopped:
-            thumb_row(r, "si", "Allow AI", allow_image)
 
     md('<div class="sect" style="margin-top:16px"><b>Recently removed</b></div>')
     gone = [R[i] for i in sorted(S.removed, key=lambda x: int(x[3:]))]
@@ -3526,15 +3459,16 @@ def nav_to(key):
 
 
 def ps_nav():
-    """One bar along the bottom on every screen size: Home, Photos, People, Collections, Clean up, Trash."""
+    """One bar along the bottom on every screen size: Home, Photos, People, Collections, Clean up, Trash, Settings."""
     if S.view in ("welcome", "analysing", "detail", "edit"):
         return
     cur = {"home": "home", "memory": "home", "attention": "home", "chat": "home", "results": "home", "photos": "photos", "people": "people", "person": "people",
-           "collections": "collections", "collection": "collections", "trash": "trash", "cleanup": "cleanup"}.get(S.view, "")
+           "collections": "collections", "collection": "collections", "trash": "trash", "cleanup": "cleanup", "settings": "settings"}.get(S.view, "")
     n_clean = sum(len(v) for v in E.cleanup_groups(visible_rows(), S.kept).values())
     items = [("home", "Home", "home", ""), ("photos", "Photos", "image", ""), ("people", "People", "users", ""),
              ("collections", "Collections", "folder", ""), ("cleanup", "Clean up", "sparkle", str(n_clean) if n_clean else ""),
-             ("trash", "Trash", "trash", str(len(S.removed)) if S.removed else "")]
+             ("trash", "Trash", "trash", str(len(S.removed)) if S.removed else ""),
+             ("settings", "Settings", "gear", "")]
     with st.container(key="psnav"):
         cols = st.columns(len(items))
         for col, (key, label, icon, badge) in zip(cols, items):

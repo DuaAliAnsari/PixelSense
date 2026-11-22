@@ -1307,3 +1307,24 @@ CSS = CSS + r"""
 /* ===== Gallery (baseline): Recently Deleted and Favorites rows inside Collections ===== */
 .bl-row{border-top:1px solid #f0f1f3;border-radius:0}
 """
+
+CSS = CSS + r"""
+/* Clear (search results): the label stays on one line on every phone */
+[data-testid="stColumn"]:has(.st-key-sm_clear){flex:0 0 auto!important;width:auto!important;min-width:max-content!important}
+.st-key-sm_clear,.st-key-sm_clear .stButton,.st-key-sm_clear [data-testid="stButton"],.st-key-sm_clear [data-testid="stElementContainer"]{width:auto!important;min-width:max-content!important}
+.st-key-sm_clear button{white-space:nowrap!important;min-width:max-content!important;padding:0 14px!important;gap:6px}
+.st-key-sm_clear button *{white-space:nowrap!important;word-break:normal!important;writing-mode:horizontal-tb!important}
+[data-testid="stHorizontalBlock"]:has(.st-key-sm_clear){flex-wrap:nowrap!important;align-items:center}
+[data-testid="stColumn"]:has(.res-head){flex:1 1 0!important;min-width:0!important}
+"""
+
+CSS = CSS + r"""
+/* ===== seven items in the bottom bar: icons and labels scale with the screen, laptops keep a roomy bar ===== */
+.st-key-psnav [data-testid="stHorizontalBlock"]{max-width:760px}
+.ps-nv{font-size:clamp(9px,2.55vw,12px);padding:7px 0;gap:3px;white-space:nowrap}
+.ps-nv svg{width:clamp(19px,5.4vw,24px)!important;height:clamp(19px,5.4vw,24px)!important}
+.ps-nv span{overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.ps-nv em{left:calc(50% + 4px);font-size:clamp(8px,2.2vw,10px);padding:1px 5px}
+@media (max-width:400px){.ps-nv{letter-spacing:-.25px}.st-key-psnav{padding-left:0!important;padding-right:0!important}}
+@media (min-width:768px){.ps-nv{font-size:12.5px}.ps-nv svg{width:24px!important;height:24px!important}}
+"""
