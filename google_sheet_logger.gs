@@ -4,12 +4,16 @@
 // 3. In Streamlit Cloud: your app > Settings > Secrets, add:   STUDY_WEBHOOK = "https://script.google.com/macros/s/XXXX/exec"
 // 4. Test: open the /exec URL in a browser. It should say "PixelSense logger is running".
 // If you change this script later, use Deploy > Manage deployments > Edit > New version, otherwise the old code keeps running.
+// Only needed if you made this script at script.google.com instead of from the Sheet (Extensions > Apps Script):
+// paste the Sheet's id here (the long text between /d/ and /edit in the Sheet's address).
+var SHEET_ID = "";
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);                       // several participants can submit at the same moment
   try {
     var data = JSON.parse(e.postData.contents);
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
     var sh = ss.getSheetByName(data.sheet) || ss.insertSheet(data.sheet);
     var keys = Object.keys(data.row);
     if (sh.getLastRow() === 0) sh.appendRow(keys);

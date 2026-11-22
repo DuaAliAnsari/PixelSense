@@ -185,19 +185,62 @@ def _webhook_url():
     return url
 
 
+def _log_push_error(msg: str):
+    try:
+        DATA_DIR.mkdir(exist_ok=True)
+        with (DATA_DIR / "push_errors.log").open("a", encoding="utf-8") as f:
+            f.write(f"{datetime.now().isoformat(timespec='seconds')} {msg}\n")
+    except Exception:
+        pass
+
+
+def _post(url: str, payload: dict, timeout: int = 40) -> str:
+    """POST one row to the Apps Script web app and return its reply text (the script answers 'ok' when the row was written)."""
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(url, data=body, headers={"Content-Type": "text/plain"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read(300).decode("utf-8", "replace").strip()
+
+
 def _push(name: str, row: dict):
     """Optional: also send every row to a Google Sheet (see google_sheet_logger.gs). A hosted app's own files can be wiped on restart, the sheet cannot."""
     url = _webhook_url()
     if not url:
         return
-    body = json.dumps({"sheet": name.replace(".csv", ""), "row": row}).encode()
+    payload = {"sheet": name.replace(".csv", ""), "row": row}
 
     def send():
         try:
-            urllib.request.urlopen(urllib.request.Request(url, data=body, headers={"Content-Type": "text/plain"}), timeout=8)
-        except Exception:
-            pass
+            reply = _post(url, payload)
+            if reply != "ok":
+                _log_push_error(f"{name}: the sheet script answered: {reply[:160]}")
+        except Exception as e:
+            _log_push_error(f"{name}: {type(e).__name__}: {e}")
     threading.Thread(target=send, daemon=True).start()
+
+
+def test_webhook() -> str:
+    """Researcher check: is the secret set, and does the Google Sheet accept a row? Writes one row to a tab called 'test'."""
+    url = _webhook_url()
+    if not url:
+        return "NOT SET: the STUDY_WEBHOOK secret is empty. Add it under Manage app > Settings > Secrets, save, then reboot the app."
+    if "/macros/s/" not in url or not url.rstrip("/").endswith("/exec"):
+        return "The STUDY_WEBHOOK value does not look like a web app URL. It must start with https://script.google.com/macros/s/ and end with /exec."
+    try:
+        reply = _post(url, {"sheet": "test", "row": {"timestamp": datetime.now().isoformat(timespec="seconds"), "note": "connection test"}})
+    except Exception as e:
+        return f"FAILED to reach the script: {type(e).__name__}: {e}"
+    if reply == "ok":
+        return "WORKING: a row was added to a tab called 'test' in your Google Sheet."
+    return "The script answered, but did not write the row: " + reply[:200] + " (If it mentions 'null' or 'getSheetByName', set SHEET_ID at the top of the script.)"
+
+
+def read_push_errors() -> str:
+    p = DATA_DIR / "push_errors.log"
+    try:
+        return "".join(p.read_text(encoding="utf-8").splitlines(True)[-8:]) if p.exists() else ""
+    except Exception:
+        return ""
 
 
 def save_progress(sd: dict):

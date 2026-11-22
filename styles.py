@@ -1202,6 +1202,7 @@ CSS = CSS + r"""
 .st-key-sidebar,.st-key-drawer{display:none!important}
 
 /* ===== Home: heading, search bar, results, Coming up ===== */
+.st-key-homesearch [data-testid="stForm"]{border:0!important;padding:0!important;background:transparent!important}
 .st-key-homesearch [data-testid="stHorizontalBlock"]{gap:8px!important;align-items:center;flex-wrap:nowrap!important}
 .st-key-homesearch [data-testid="stColumn"]:last-child{flex:0 0 52px!important;width:52px!important;min-width:52px!important}
 .st-key-homesearch input{height:50px!important;border-radius:14px!important;font-size:15.5px!important}

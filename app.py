@@ -1307,12 +1307,16 @@ def coming_up_home():
 def view_home():
     appbar("Home", greet=True)
     with st.container(key="homesearch"):
-        c1, c2 = st.columns([8, 1.3])
-        with c1:
-            st.text_input("Search your library", key="home_q", placeholder="Search or ask, e.g. “gas bill October”", label_visibility="collapsed", on_change=home_send)
-        with c2:
-            with st.container(key="homesearch_btn"):
-                st.button("Search", key="home_search_btn", icon=":material/search:", on_click=home_send)
+        with st.form("home_search_form", clear_on_submit=True):      # Enter and the Search button are one submit, so the page is rebuilt once
+            c1, c2 = st.columns([8, 1.3])
+            with c1:
+                q_in = st.text_input("Search your library", key="home_q", placeholder="Search or ask, e.g. “gas bill October”", label_visibility="collapsed")
+            with c2:
+                with st.container(key="homesearch_btn"):
+                    sent = st.form_submit_button("Search", icon=":material/search:")
+        if sent:
+            ask(q_in)
+            st.rerun()
     if S.chat:
         home_results()
     else:
@@ -2619,7 +2623,19 @@ def study_done():
         for col, name in zip((c1, c2, c3), ("tasks.csv", "participants.csv", "final.csv")):
             with col:
                 st.download_button(f"Download {name}", ST.read_csv_bytes(name), file_name=name, mime="text/csv", key=f"dl_{name}")
+    with st.expander("Researcher: check the Google Sheet connection"):
+        if st.button("Test Google Sheet now", key="st_webhook_test"):
+            st.info(ST.test_webhook())
+        _errs = ST.read_push_errors()
+        if _errs:
+            st.caption("Recent save errors:")
+            st.code(_errs)
     with st.container(key="sm_stb"):
+        if st.button("Back to Home", key="st_home"):
+            S.study = None
+            S.view = "home"
+            st.query_params.clear()
+            st.rerun()
         if st.button("Start next participant", type="primary", key="st_next"):
             st.query_params.clear()
             S.update(fresh_state())
