@@ -1328,7 +1328,13 @@ CSS = CSS + r"""
 .ps-nv em{left:calc(50% + 4px);font-size:clamp(8px,2.2vw,10px);padding:1px 5px}
 @media (max-width:400px){.ps-nv{letter-spacing:-.25px}.st-key-psnav{padding-left:0!important;padding-right:0!important}}
 @media (min-width:768px){.ps-nv{font-size:13px}.ps-nv svg{width:26px!important;height:26px!important}}
-[class*="st-key-tap_me_settings"]{width:52px!important;cursor:pointer}
+.st-key-me_settings{width:52px!important;max-width:52px;margin-left:auto}
+.st-key-me_settings [data-testid="stElementContainer"],.st-key-me_settings .stButton,.st-key-me_settings [data-testid="stButton"]{width:52px!important;min-width:0!important}
+.st-key-me_settings button{width:52px!important;height:52px!important;min-height:52px!important;padding:0!important;border-radius:50%!important;
+  background-color:#EEEBFF!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;
+  border:2px solid #fff!important;box-shadow:0 0 0 1px #E6E7F2,0 2px 8px rgba(27,29,58,.12)!important;color:transparent!important;font-size:0!important;overflow:hidden}
+.st-key-me_settings button *{display:none!important}
+.st-key-me_settings button:hover{border-color:#fff!important;filter:brightness(.96)}
 """
 
 CSS = CSS + r"""
@@ -1357,4 +1363,15 @@ CSS = CSS + r"""
 [class*="st-key-fin_box_"] [data-testid="stCheckbox"] label:has(input:checked){border-color:#5B4FD6;background:#F3F1FF}
 [class*="st-key-fin_box_"] [data-testid="stCheckbox"] label p{font-size:15px!important;font-weight:600!important;color:#1F2140!important;margin:0!important}
 [class*="st-key-fin_box_"] [data-testid="stCheckbox"] label>div:first-child{margin:0!important}
+"""
+
+CSS = CSS + r"""
+/* Sara's round photo in the task card and the task bar */
+.task-who{display:flex;align-items:center;gap:16px;margin:10px 0}
+.who-face{width:96px;height:96px;min-width:96px;border-radius:50%;object-fit:cover;border:3px solid #fff;box-shadow:0 0 0 2px #CFC9FF,0 6px 16px rgba(52,44,140,.22)}
+.who-name{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6B6F8C;margin-bottom:2px}
+.sb-t.sb-with{display:flex;align-items:center;gap:12px}
+.sb-face{width:48px;height:48px;min-width:48px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.85)}
+.sb-tx{min-width:0;flex:1}
+@media (max-width:480px){.who-face{width:76px;height:76px;min-width:76px}.sb-face{width:40px;height:40px;min-width:40px}}
 """

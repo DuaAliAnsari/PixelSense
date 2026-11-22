@@ -492,6 +492,19 @@ def me_pic_uri():
     return face_uri(R[best].file, x, y, w, h, size=96)
 
 
+def task_face(text):
+    """Round face of Sara when a study task asks the participant to find her, so they know who to look for ("" for other tasks)."""
+    pid = next((p for p in E.PERSON_IMAGES if p.lower() == "sara"), None)
+    if "sara" not in text.lower() or not pid:
+        return ""
+    ids = E.PERSON_IMAGES.get(pid, [])
+    if not ids:
+        return ""
+    best = max(ids, key=lambda i: E.FACE_OF[(i, pid)][2] * E.FACE_OF[(i, pid)][3])
+    x, y, w, h = E.FACE_OF[(best, pid)]
+    return face_uri(R[best].file, x, y, w, h, size=160)
+
+
 def greeting():
     h = datetime.now().hour
     return "Good morning" if h < 12 else "Good afternoon" if h < 18 else "Good evening"
@@ -507,7 +520,11 @@ def appbar(title="PixelSense", chat_btn=False, greet=False):
                 md(f'<div class="ab-title">{esc(title)}</div>')
         with c2:
             if greet:
-                tappable("me_settings", f'<img class="me" src="{me_pic_uri()}" alt="{esc(USER_NAME)} account picture">', go, "settings", label="Open Settings")
+                # the profile picture is the button's own background: its tap area is exactly the circle, nothing is laid over other controls
+                md(f'<style>.st-key-me_settings button{{background-image:url("{me_pic_uri()}")!important}}</style>')
+                with st.container(key="me_settings"):
+                    if st.button("Settings", key="me_settings_btn", help="Open Settings"):
+                        go("settings")
 
 
 def snack_ui():
@@ -1602,7 +1619,9 @@ def study_bar():
                     "[0,60,250,700,1500].forEach(t=>setTimeout(()=>P.__sbfit&&P.__sbfit(),t));"
                     f"}})();/*task {sd['i']} {n_ch}*/</script>", height=0)      # the comment makes the script different for every task, so it re-measures
     with st.container(key="studybar"):
-        md(f'<div class="sb-t"><span>Task {sd["i"] + 1} of {len(study_tasks())}</span><b>{esc(t["text"])}</b></div>')
+        fu = task_face(t["text"])
+        face = f'<img class="sb-face" src="{fu}" alt="Sara">' if fu else ""
+        md(f'<div class="sb-t{" sb-with" if fu else ""}">{face}<div class="sb-tx"><span>Task {sd["i"] + 1} of {len(study_tasks())}</span><b>{esc(t["text"])}</b></div></div>')
         if st.button("Give up", key="sb_giveup"):
             study_end(True)
 
@@ -2536,7 +2555,12 @@ def study_tasks_ui():
         what = ("This version has an assistant that can search, tidy and edit your photos." if sd["cond"] == "PixelSense"
                 else "This version is a regular photo gallery, like the ones on most phones.")
         md(f'<div class="card pad glass info"><p>{what} Try each task the way you normally would. The app notices when you are done. If it is too hard, tap <b>Give up</b>; that is useful for us.</p></div>')
-    md(f'<div class="card pad glass" style="margin:10px 0"><div class="rtitle" style="font-size:17px">{esc(t["text"])}</div></div>')
+    fu = task_face(t["text"])
+    if fu:
+        md(f'<div class="card pad glass task-who"><img class="who-face" src="{fu}" alt="Sara"><div><div class="who-name">Sara</div>'
+           f'<div class="rtitle" style="font-size:17px">{esc(t["text"])}</div></div></div>')
+    else:
+        md(f'<div class="card pad glass" style="margin:10px 0"><div class="rtitle" style="font-size:17px">{esc(t["text"])}</div></div>')
     with st.container(key="sm_stb"):
         if st.button("Start task", type="primary", key="st_start"):
             sd.update(running=True, t0=time.time(), nav=0, undos=0, searches=0, opened0=set(S.opened), removed0=set(S.removed), copies0=len(S.copies),
