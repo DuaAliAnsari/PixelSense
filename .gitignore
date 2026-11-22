@@ -1,3 +1,4 @@
 study_data/
 __pycache__/
 .venv/
+claim_*

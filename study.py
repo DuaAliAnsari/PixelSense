@@ -251,6 +251,20 @@ def next_pid() -> str:
     return f"P{max(n, 0) + 1:02d}"
 
 
+def claim_pid() -> str:
+    """Hand out the next free participant number at the moment someone taps Begin. Creating the claim file is atomic, so two people
+    starting at the same second can never get the same number (next_pid only previews it and can be stale)."""
+    DATA_DIR.mkdir(exist_ok=True)
+    n = int(next_pid()[1:])
+    while True:
+        pid = f"P{n:02d}"
+        try:
+            with (DATA_DIR / f"claim_{pid}").open("x"):
+                return pid
+        except FileExistsError:
+            n += 1
+
+
 def order_for(pid: str) -> list[str]:
     """Everyone does the Gallery (baseline) first, then PixelSense. The order is fixed, so say in the report that order effects are not cancelled out."""
     return [CONDITIONS[1], CONDITIONS[0]]

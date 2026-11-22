@@ -119,6 +119,8 @@ def fresh_state():
 
 
 if "boot" not in S:
+    import importlib
+    ST = importlib.reload(ST)          # a hosted app can keep an old study.py in memory after a push; this picks up the new one
     S.update(fresh_state())
     S.boot = True
 E.sync_copies(S.copies)
@@ -1594,7 +1596,7 @@ def study_bar():
                     "for(let fs=11;fs>=9.5;fs-=0.5){b.style.fontSize=fs+'px';if(need()<=120)return;}}"
                     "P.__sbfit=fit;if(!P.__sbfitOn){P.__sbfitOn=1;P.addEventListener('resize',()=>P.__sbfit&&P.__sbfit());}"
                     "[0,60,250,700,1500].forEach(t=>setTimeout(()=>P.__sbfit&&P.__sbfit(),t));"
-                    "})();</script>", height=0)
+                    f"}})();/*task {sd['i']} {n_ch}*/</script>", height=0)      # the comment makes the script different for every task, so it re-measures
     with st.container(key="studybar"):
         md(f'<div class="sb-t"><span>Task {sd["i"] + 1} of {len(study_tasks())}</span><b>{esc(t["text"])}</b></div>')
         if st.button("Give up", key="sb_giveup"):
@@ -2500,15 +2502,15 @@ def view_study():
 
 
 def study_intro():
-    pid = ST.next_pid()
     md(f'<div class="card pad glass info"><p><b>Information and consent</b></p><p>{esc(ST.CONSENT)}</p></div>')
-    st.caption(f"Your participant number is {pid}. You will try two versions of a photo app, one after the other.")
+    st.caption("You will try two versions of a photo app, one after the other. Your participant number is given when you tap Begin.")
     age = st.selectbox("Age range", ST.AGE_RANGES, index=None, key="in_age")
     kept = st.selectbox("About how many photos are on your phone?", ST.PHOTO_COUNTS, index=None, key="in_kept")
     freq = st.selectbox("How often do you search for a specific photo?", ST.SEARCH_FREQ, index=None, key="in_freq")
     ok = st.checkbox("I have read the information above and agree to take part.", key="st_consent")
     with st.container(key="sm_stb"):
         if st.button("Begin", type="primary", key="st_begin", disabled=not (ok and age and kept and freq)):
+            pid = ST.claim_pid()
             order, sets = ST.order_for(pid), ST.sets_for(pid)
             ST.log_participant(participant=pid, order=" > ".join(order), task_sets=f"PixelSense={sets['PixelSense']}, Gallery={sets['Gallery (baseline)']}",
                                age_range=age, photos_kept=kept, search_freq=freq)
@@ -3488,6 +3490,18 @@ def ps_nav():
                                       + (f'<em>{badge}</em>' if badge else "") + '</div>', nav_to, key, label=label)
 
 
+def hosted_badge_fix():
+    """On Streamlit Community Cloud a 'Hosted with Streamlit' badge floats over the bottom-right of every phone screen and covers the last tab.
+    It cannot be removed, so on the hosted site only, the bottom tab bars get extra white space under them and the badge sits there."""
+    try:
+        host = st.context.headers.get("Host", "") or ""
+    except Exception:
+        host = ""
+    if "streamlit.app" in host:
+        md('<style>@media (max-width:760px){.st-key-psnav,.st-key-bl_side{padding-bottom:calc(54px + env(safe-area-inset-bottom))!important}'
+           '[data-testid="stMainBlockContainer"]{padding-bottom:200px!important}}</style>')
+
+
 # --------------------------------------------------------------------------- router
 VIEWS = {"attention": view_attention, "study": view_study, "baseline": view_baseline, "edit": view_edit, "home": view_home, "cleanup": view_cleanup, "memory": view_memory, "welcome": view_welcome, "analysing": view_analysing, "chat": view_chat, "photos": view_photos,
          "results": view_results, "people": view_people, "person": view_person, "detail": view_detail,
@@ -3515,6 +3529,7 @@ with st.container(key=f"v_{S.view}"):
     VIEWS.get(S.view, view_chat)()
 if S.study and S.study.get("running"):
     study_bar()
+hosted_badge_fix()
 
 if S.view not in ("baseline", "study"):
     ps_nav()          # no app navigation on the baseline or on study screens, so a participant cannot wander into the other version

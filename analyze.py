@@ -50,7 +50,7 @@ if (D / "final.csv").exists():
         col = f[q["key"]].dropna().astype(str)
         print(f"\n{n}. {q['text']}")
         if q["kind"] == "multi":
-            print(col.str.split(" \\| ").explode().value_counts().to_string())       # up to two answers per person
+            print(col.str.split("; ", regex=False).explode().value_counts().to_string())       # up to two answers per person
         elif q.get("ordered"):
             pos = col.map({o: i + 1 for i, o in enumerate(q["options"])})
             top2 = (pos >= len(q["options"]) - 1).mean() * 100
