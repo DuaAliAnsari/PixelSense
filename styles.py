@@ -1320,11 +1320,12 @@ CSS = CSS + r"""
 
 CSS = CSS + r"""
 /* ===== seven items in the bottom bar: icons and labels scale with the screen, laptops keep a roomy bar ===== */
-.st-key-psnav [data-testid="stHorizontalBlock"]{max-width:760px}
-.ps-nv{font-size:clamp(9px,2.55vw,12px);padding:7px 0;gap:3px;white-space:nowrap}
-.ps-nv svg{width:clamp(19px,5.4vw,24px)!important;height:clamp(19px,5.4vw,24px)!important}
+.st-key-psnav [data-testid="stHorizontalBlock"]{max-width:620px}
+.ps-nv{font-size:clamp(10.5px,2.9vw,13px);padding:7px 0;gap:3px;white-space:nowrap}
+.ps-nv svg{width:clamp(22px,6.2vw,26px)!important;height:clamp(22px,6.2vw,26px)!important}
 .ps-nv span{overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .ps-nv em{left:calc(50% + 4px);font-size:clamp(8px,2.2vw,10px);padding:1px 5px}
 @media (max-width:400px){.ps-nv{letter-spacing:-.25px}.st-key-psnav{padding-left:0!important;padding-right:0!important}}
-@media (min-width:768px){.ps-nv{font-size:12.5px}.ps-nv svg{width:24px!important;height:24px!important}}
+@media (min-width:768px){.ps-nv{font-size:13px}.ps-nv svg{width:26px!important;height:26px!important}}
+[class*="st-key-tap_me_settings"]{width:52px!important;cursor:pointer}
 """

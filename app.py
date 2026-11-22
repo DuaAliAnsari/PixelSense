@@ -505,7 +505,7 @@ def appbar(title="PixelSense", chat_btn=False, greet=False):
                 md(f'<div class="ab-title">{esc(title)}</div>')
         with c2:
             if greet:
-                md(f'<img class="me" src="{me_pic_uri()}" alt="{esc(USER_NAME)} account picture">')
+                tappable("me_settings", f'<img class="me" src="{me_pic_uri()}" alt="{esc(USER_NAME)} account picture">', go, "settings", label="Open Settings")
 
 
 def snack_ui():
@@ -3128,7 +3128,10 @@ def view_collections():
     cats = [c for c in all_cats() if c not in S.excluded_cats]
     cards = [("cl_fav", f'<div class="card crow pressable"><div class="cthumb" style="background:#FFE9EC;color:#D6455D">{svg("heart", 24, "#D6455D", 2, "#D6455D")}</div>'
                         f'<div style="flex:1;min-width:0"><div class="rtitle" style="font-size:15.5px">Favorites</div><div class="ccount">{len([i for i in S.fav if i in R and visible(R[i])])} items</div></div>'
-                        f'<div class="chev">{svg("chev", 20)}</div></div>', nav_to, "favorites", "Open Favorites")]
+                        f'<div class="chev">{svg("chev", 20)}</div></div>', nav_to, "favorites", "Open Favorites"),
+             ("cl_trash", f'<div class="card crow pressable"><div class="cthumb" style="background:#EEF0F6;color:#6B6F8C">{svg("trash", 24)}</div>'
+                          f'<div style="flex:1;min-width:0"><div class="rtitle" style="font-size:15.5px">Trash</div><div class="ccount">{len(S.removed)} item{"s" if len(S.removed) != 1 else ""}</div></div>'
+                          f'<div class="chev">{svg("chev", 20)}</div></div>', go, "trash", "Open Trash")]
     for n, name in enumerate(cats):
         items = coll_items(name)
         bg, fg = TILE_COLORS[n % len(TILE_COLORS)]
@@ -3169,7 +3172,7 @@ def flip_tick(i, scope):
 
 
 def view_trash():
-    appbar("Trash")
+    topbar("Trash", "collections", "trash")
     snack_ui()
     gone = [R[i] for i in sorted(S.removed, key=lambda x: int(x[3:]))]
     if not gone:
@@ -3311,7 +3314,7 @@ def your_data_ui():
 
 
 def view_settings():
-    appbar("Settings")
+    topbar("Settings", "home", "settings")
     md('<div class="sub" style="margin-top:6px">Privacy and face groups.</div>')
     snack_ui()
 
@@ -3459,16 +3462,14 @@ def nav_to(key):
 
 
 def ps_nav():
-    """One bar along the bottom on every screen size: Home, Photos, People, Collections, Clean up, Trash, Settings."""
+    """One bar along the bottom on every screen size: Home, Photos, People, Collections, Clean up. Trash lives in Collections; Settings opens from the profile picture."""
     if S.view in ("welcome", "analysing", "detail", "edit"):
         return
     cur = {"home": "home", "memory": "home", "attention": "home", "chat": "home", "results": "home", "photos": "photos", "people": "people", "person": "people",
-           "collections": "collections", "collection": "collections", "trash": "trash", "cleanup": "cleanup", "settings": "settings"}.get(S.view, "")
+           "collections": "collections", "collection": "collections", "trash": "collections", "cleanup": "cleanup"}.get(S.view, "")
     n_clean = sum(len(v) for v in E.cleanup_groups(visible_rows(), S.kept).values())
     items = [("home", "Home", "home", ""), ("photos", "Photos", "image", ""), ("people", "People", "users", ""),
-             ("collections", "Collections", "folder", ""), ("cleanup", "Clean up", "sparkle", str(n_clean) if n_clean else ""),
-             ("trash", "Trash", "trash", str(len(S.removed)) if S.removed else ""),
-             ("settings", "Settings", "gear", "")]
+             ("collections", "Collections", "folder", ""), ("cleanup", "Clean up", "sparkle", str(n_clean) if n_clean else "")]
     with st.container(key="psnav"):
         cols = st.columns(len(items))
         for col, (key, label, icon, badge) in zip(cols, items):

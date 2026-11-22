@@ -59,7 +59,7 @@ CORE = [
          text="Free up space: delete all the memes (joke screenshots).",
          text_base="Free up space: delete all the memes (joke screenshots)."),
     dict(id="M1", rq="RQ6", title="Delete and restore (trash)", kind="restore", targets={"img53", "img54"},
-         text="Delete one photo of the chocolate cake, then bring it back from Trash.",
+         text="Delete one photo of the chocolate cake, then bring it back from Trash (inside Collections).",
          text_base="Delete one photo of the chocolate cake, then restore it from Recently Deleted (inside Collections)."),
 ]
 TASK_ORDER = ["F1", "S1", "P1", "M2", "E1", "C1", "M1"]
