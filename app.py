@@ -1579,10 +1579,22 @@ def study_bar():
     sd = S.study
     t = study_tasks()[sd["i"]]
     # the bar is a fixed panel 68px tall; every screen (and the sidebars) starts below it, so nothing is ever hidden behind it
-    md("<style>:root{--sbh:68px;--sbo:68px}[data-testid='stMainBlockContainer']{padding-top:calc(var(--sbh) + 14px)!important}"
+    n_ch = len(t["text"])
+    h0 = 68 if n_ch <= 105 else 84 if n_ch <= 150 else 100       # a first guess; the script below measures the real text and adjusts
+    md("<style>:root{--sbh:" + f"{h0}px;--sbo:{h0}px" + "}[data-testid='stMainBlockContainer']{padding-top:calc(var(--sbh) + 14px)!important}"
        ".st-key-sidebar,.st-key-drawer{top:var(--sbh)!important}"
        ".st-key-v_chat .st-key-appbar,.st-key-v_results .st-key-appbar,"
        ".st-key-v_chat [data-testid='stLayoutWrapper']:has(> .st-key-appbar),.st-key-v_results [data-testid='stLayoutWrapper']:has(> .st-key-appbar){top:var(--sbh)!important}</style>")
+    components.html("<script>(function(){const P=window.parent,d=P.document;"
+                    "function fit(){const bar=d.querySelector('.st-key-studybar');if(!bar)return;const b=bar.querySelector('.sb-t b'),sp=bar.querySelector('.sb-t span');if(!b||!sp)return;"
+                    "const root=d.documentElement;const setH=h=>{root.style.setProperty('--sbh',h+'px');root.style.setProperty('--sbo',h+'px')};"
+                    "const need=()=>sp.offsetHeight+b.offsetHeight+16;"
+                    "setH(68);for(let fs=14;fs>=11.5;fs-=0.5){b.style.fontSize=fs+'px';if(need()<=68)return;}"
+                    "for(let h=72;h<=120;h+=4){setH(h);if(need()<=h)return;}"
+                    "for(let fs=11;fs>=9.5;fs-=0.5){b.style.fontSize=fs+'px';if(need()<=120)return;}}"
+                    "P.__sbfit=fit;if(!P.__sbfitOn){P.__sbfitOn=1;P.addEventListener('resize',()=>P.__sbfit&&P.__sbfit());}"
+                    "[0,60,250,700,1500].forEach(t=>setTimeout(()=>P.__sbfit&&P.__sbfit(),t));"
+                    "})();</script>", height=0)
     with st.container(key="studybar"):
         md(f'<div class="sb-t"><span>Task {sd["i"] + 1} of {len(study_tasks())}</span><b>{esc(t["text"])}</b></div>')
         if st.button("Give up", key="sb_giveup"):
@@ -1597,6 +1609,11 @@ def scale_radio(label, opts, key, low="", high="", mid=""):
         if low or high:
             scale_ends(low, high, mid)
         return v
+
+
+def sus_text(q):
+    """Item text; some versions of study.py store (text, is_positive) pairs."""
+    return q[0] if isinstance(q, (tuple, list)) else q
 
 
 TLX_FALLBACK = [("mental", "Mental demand", "How mentally demanding was it? (0 = very low, 100 = very high)"),
@@ -2544,45 +2561,48 @@ def study_between():
 
 
 def study_final():
-    """The only survey, once, after both versions: 15 short questions (see FINAL_FORM in study.py)."""
+    """The only survey, built from ST.FINAL_FORM (study.py): radio or pick-up-to-N questions, an optional one-tap follow-up under some,
+    and an optional free-text box. Every question is numbered; follow-ups are 12a, 13a ... Everything is required except the free-text box."""
     sd = S.study
+    qs = ST.FINAL_FORM
+    n_ps = sum(1 for q in qs if q.get("group") == "ps")
     md('<div class="sect"><b>Last step: a short survey</b></div>'
-       '<div class="sub" style="margin-top:0">15 quick questions, about 3 minutes. Questions 1 to 11 are about PixelSense. '
+       f'<div class="sub" style="margin-top:0">{len(qs)} quick questions, about 3 minutes. Questions 1 to {n_ps} are about PixelSense. '
        'Everything is required except the last box.</div>')
+    ans = {}
     with st.form("final_form"):
-        ans, nums, shown = {}, {}, set()
-        for n, q in enumerate(ST.FINAL_FORM, 1):
-            nums[q["key"]] = n
-            if q["group"] == "overall" and "overall" not in shown:
-                shown.add("overall")
-                md('<div class="sect" style="margin-top:14px"><b>Overall, both versions</b></div>')
-            elif q["group"] == "ps" and "ps" not in shown:
-                shown.add("ps")
-                md('<div class="sect" style="margin-top:6px"><b>About PixelSense</b></div>')
-            with st.container(key=f"fq_{q['key']}"):
-                md(f'<div class="cmp-q" style="margin-top:0">{n}. {esc(q["text"])}</div>')
-                if q["kind"] == "multi":
-                    ans[q["key"]] = st.multiselect(q["text"], q["options"], max_selections=q.get("max", 2), placeholder="Choose up to two",
-                                                   key=f"fin_{q['key']}", label_visibility="collapsed")
+        for n, q in enumerate(qs, 1):
+            with st.container(key=f"fin_box_{q['key']}"):
+                md(f'<div class="cmp-q">{n}. {esc(q["text"])}</div>')
+                if q.get("kind") == "multi":
+                    ans[q["key"]] = [o for k, o in enumerate(q["options"]) if st.checkbox(o, key=f"fin_{q['key']}_{k}")]
                 else:
                     ans[q["key"]] = st.radio(q["text"], q["options"], index=None, key=f"fin_{q['key']}", label_visibility="collapsed")
-                f = q.get("follow")
-                if f:
-                    md(f'<div class="fq-sub">{esc(f["text"])}</div>')
+                if q.get("follow"):
+                    f = q["follow"]
+                    md(f'<div class="cmp-q" style="margin-top:10px">{n}a. {esc(f["text"])}</div>')
                     ans[f["key"]] = st.radio(f["text"], f["options"], index=None, key=f"fin_{f['key']}", label_visibility="collapsed")
                 if q.get("other_key"):
-                    ans[q["other_key"]] = st.text_input("If something else, tell us what (optional)", key=f"fin_{q['other_key']}")
+                    ans[q["other_key"]] = st.text_area("Anything to add? (optional)", key=f"fin_{q['other_key']}", height=80, placeholder="Anything to add? (optional)")
         submitted = st.form_submit_button("Finish", type="primary")
     if submitted:
         missing = []
-        for q in ST.FINAL_FORM:
-            for k in (q["key"], (q.get("follow") or {}).get("key")):
-                if k and not ans[k]:
-                    missing.append(str(nums[q["key"]]) + ("" if k == q["key"] else " (follow-up)"))
+        for n, q in enumerate(qs, 1):
+            v = ans[q["key"]]
+            if q.get("kind") == "multi":
+                if not v:
+                    missing.append(str(n))
+                elif len(v) > q.get("max", len(q["options"])):
+                    st.warning(f"Question {n}: please choose at most {q['max']}.")
+                    return
+            elif v is None:
+                missing.append(str(n))
+            if q.get("follow") and ans[q["follow"]["key"]] is None:
+                missing.append(f"{n}a")
         if missing:
             st.warning("Please answer: " + ", ".join(missing) + ".")
             return
-        row = {k: (" | ".join(v) if isinstance(v, list) else (v or "").replace("\n", " ")) for k, v in ans.items()}
+        row = {k: ("; ".join(v) if isinstance(v, list) else ("" if v is None else str(v).replace("\n", " "))) for k, v in ans.items()}
         ST.log_final(participant=sd["pid"], **row)
         sd["step"] = "done"
         study_clear_answers()
@@ -3508,4 +3528,4 @@ if S.scroll:
                         "const m=d.querySelector('[data-testid=\"stMain\"]')||d.querySelector('section.main');"
                         f"m.scrollTo(0,{target});}}catch(e){{}}}},140);</script>", height=0)
     except Exception:
-        pass
+        pass

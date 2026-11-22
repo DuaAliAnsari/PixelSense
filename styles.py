@@ -1275,12 +1275,6 @@ CSS = CSS + r"""
 
 /* ===== One comparison survey ===== */
 .cmp-q{font-weight:700;font-size:15px;color:#1F2140;line-height:1.35;margin:14px 0 4px}
-[class*="st-key-fq_"]{background:#fff;border-radius:16px;padding:12px 16px 8px;box-shadow:0 1px 2px rgba(31,33,64,.04),0 6px 18px rgba(31,33,64,.06);margin-bottom:10px}
-.fq-sub{font-size:14px;font-weight:600;color:#5E627F;margin:10px 0 4px}
-[class*="st-key-fq_"] [data-testid="stRadio"] [role="radiogroup"]{display:flex!important;flex-direction:column!important;gap:6px!important}
-[class*="st-key-fq_"] [data-testid="stRadio"] label{width:100%!important;box-sizing:border-box;padding:9px 14px!important;border:1px solid #E4E6F1!important;border-radius:12px!important;background:#fff!important;margin:0!important}
-[class*="st-key-fq_"] [data-testid="stRadio"] label:has(input:checked){background:#EEEBFF!important;border-color:#5B4FD6!important}
-[class*="st-key-fq_"] [data-testid="stRadio"] label p{font-size:15px!important;font-weight:600!important;color:#1F2140!important}
 
 /* ===== Photo picker (add photos), photo screen controls ===== */
 .pk-prev{background:#12132A;border-radius:14px;display:flex;align-items:center;justify-content:center;height:min(52dvh,520px);overflow:hidden}
@@ -1334,4 +1328,23 @@ CSS = CSS + r"""
 @media (max-width:400px){.ps-nv{letter-spacing:-.25px}.st-key-psnav{padding-left:0!important;padding-right:0!important}}
 @media (min-width:768px){.ps-nv{font-size:13px}.ps-nv svg{width:26px!important;height:26px!important}}
 [class*="st-key-tap_me_settings"]{width:52px!important;cursor:pointer}
-"""
+"""
+
+CSS = CSS + r"""
+/* study task bar: the text always fits (the script shrinks the font a little, then grows the bar for very long tasks) */
+.st-key-studybar{align-items:center!important;transition:height .15s}
+.st-key-studybar .sb-t{min-width:0;overflow:hidden}
+.sb-t b{font-size:14px;line-height:1.25;overflow-wrap:anywhere}
+.sb-t span{line-height:1.2}
+@media (max-width:767px){.st-key-studybar{padding:0 12px!important;gap:10px!important}.st-key-studybar .stButton>button{padding:0 14px}}
+"""
+
+CSS = CSS + r"""
+/* Gallery: "Select all" / "Deselect all" stays on one line on a phone */
+[data-testid="stColumn"]:has(.st-key-blh_selall){flex:0 0 auto!important;width:auto!important;min-width:max-content!important}
+.st-key-blh_selall,.st-key-blh_selall [data-testid="stElementContainer"],.st-key-blh_selall .stButton,.st-key-blh_selall [data-testid="stButton"]{width:auto!important;min-width:max-content!important}
+.st-key-blh_selall button{white-space:nowrap!important;padding:0 4px!important;font-size:14px!important;min-width:max-content!important}
+.st-key-blh_selall button *{white-space:nowrap!important;word-break:normal!important;writing-mode:horizontal-tb!important}
+[data-testid="stHorizontalBlock"]:has(.st-key-blh_selall){flex-wrap:nowrap!important;align-items:center}
+[data-testid="stColumn"]:has(.st-key-blhclose_sel){flex:0 0 auto!important;width:auto!important}
+"""
