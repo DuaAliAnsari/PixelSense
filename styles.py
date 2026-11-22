@@ -1275,6 +1275,12 @@ CSS = CSS + r"""
 
 /* ===== One comparison survey ===== */
 .cmp-q{font-weight:700;font-size:15px;color:#1F2140;line-height:1.35;margin:14px 0 4px}
+[class*="st-key-fq_"]{background:#fff;border-radius:16px;padding:12px 16px 8px;box-shadow:0 1px 2px rgba(31,33,64,.04),0 6px 18px rgba(31,33,64,.06);margin-bottom:10px}
+.fq-sub{font-size:14px;font-weight:600;color:#5E627F;margin:10px 0 4px}
+[class*="st-key-fq_"] [data-testid="stRadio"] [role="radiogroup"]{display:flex!important;flex-direction:column!important;gap:6px!important}
+[class*="st-key-fq_"] [data-testid="stRadio"] label{width:100%!important;box-sizing:border-box;padding:9px 14px!important;border:1px solid #E4E6F1!important;border-radius:12px!important;background:#fff!important;margin:0!important}
+[class*="st-key-fq_"] [data-testid="stRadio"] label:has(input:checked){background:#EEEBFF!important;border-color:#5B4FD6!important}
+[class*="st-key-fq_"] [data-testid="stRadio"] label p{font-size:15px!important;font-weight:600!important;color:#1F2140!important}
 
 /* ===== Photo picker (add photos), photo screen controls ===== */
 .pk-prev{background:#12132A;border-radius:14px;display:flex;align-items:center;justify-content:center;height:min(52dvh,520px);overflow:hidden}
@@ -1328,4 +1334,4 @@ CSS = CSS + r"""
 @media (max-width:400px){.ps-nv{letter-spacing:-.25px}.st-key-psnav{padding-left:0!important;padding-right:0!important}}
 @media (min-width:768px){.ps-nv{font-size:13px}.ps-nv svg{width:26px!important;height:26px!important}}
 [class*="st-key-tap_me_settings"]{width:52px!important;cursor:pointer}
-"""
+"""

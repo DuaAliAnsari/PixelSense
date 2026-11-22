@@ -1,10 +1,10 @@
-"""Evaluation kit: tasks, questionnaires, scoring and data files for the usability study.
+"""Evaluation kit: tasks, the end-of-session survey and data files for the usability study.
 
 Design (see RESEARCH_PLAN.md): a within-subjects comparison. Each participant does matched tasks twice, once with PixelSense and
 once with a plain 'Gallery (baseline)' that has no search, no suggestions and no assistant, in a fixed order (Gallery first, then PixelSense).
 One session = one participant + one condition. Run the app twice per participant.
 
-Data is appended to study_data/tasks.csv and study_data/questionnaires.csv the moment it is collected, so nothing is lost
+Data is appended to study_data/tasks.csv and study_data/final.csv the moment it is collected, so nothing is lost
 if the browser closes. These files stay on the researcher's machine. Participant ids only; no names.
 """
 from __future__ import annotations
@@ -90,31 +90,9 @@ PHOTO_COUNTS = ["Under 500", "500 to 2,000", "2,000 to 10,000", "Over 10,000"]
 SEARCH_FREQ = ["Never", "A few times a year", "Monthly", "Weekly or more"]
 
 
-# Short SUS, the same 5 statements for both versions, answered once for each version in the single comparison survey at the end. Original SUS items 4, 8, 9 and 10 (needing technical support, cumbersome, confident,
-# needed to learn a lot) overlapped with each other and with the others, and item 3 ("easy to use") mirrored item 2 ("unnecessarily complex"),
-# so they are dropped. Kept: SUS 1, 2, 5, 6, 7. (text, positively worded?)  Workload (NASA-TLX), UEQ-S and trust items were removed to keep the
-# survey short; the per-task SEQ and the final questions still cover effort and preference.
-SUS_ITEMS = [
-    ("I think that I would like to use this system frequently.", True),
-    ("I found the system unnecessarily complex.", False),
-    ("I found the various functions in this system were well integrated.", True),
-    ("I thought there was too much inconsistency in this system.", False),
-    ("I would imagine that most people would learn to use this system very quickly.", True),
-]
-SUS_N = len(SUS_ITEMS)
-
 # Every choice carries its own words, so it is always clear which end is which.
 SEQ_LABELS = {1: "1 - Very difficult", 2: "2 - Difficult", 3: "3 - Slightly difficult", 4: "4 - Neither easy nor difficult",
               5: "5 - Slightly easy", 6: "6 - Easy", 7: "7 - Very easy"}
-AGREE_LABELS = {1: "1 - Strongly disagree", 2: "2 - Disagree", 3: "3 - Neutral", 4: "4 - Agree", 5: "5 - Strongly agree"}
-
-
-def sus_score(answers: list[int]) -> float:
-    """Short-SUS, 0 to 100: positive items score-1, negative items 5-score, summed and scaled by 100 / (4 x items).
-    With all 10 items this equals the standard SUS (sum x 2.5). With 5 items it is on the same 0 to 100 range but is NOT the standard SUS,
-    so do not compare it with the usual benchmark of 68; compare PixelSense with the Gallery instead."""
-    pts = sum((a - 1) if SUS_ITEMS[i][1] else (5 - a) for i, a in enumerate(answers))
-    return round(pts * 100 / (4 * len(answers)), 1)
 
 
 def counterbalance(pid: str) -> str:
@@ -125,24 +103,75 @@ def counterbalance(pid: str) -> str:
 
 TASK_FIELDS = ["timestamp", "participant", "order", "condition", "task_id", "task_set", "rq", "seconds", "outcome", "success", "wrong_actions",
                "photos_opened", "searches", "undos", "screens_visited", "seq"]
-Q_FIELDS = ["timestamp", "participant", "condition"] + [f"sus_{i + 1}" for i in range(SUS_N)] + ["sus_score"]
 PARTICIPANT_FIELDS = ["timestamp", "participant", "order", "task_sets", "age_range", "photos_kept", "search_freq"]
-# The last form, after both versions. Each question is a multiple choice; edit the wording or the options here and the form follows.
-# kind: "radio" (one answer). {v1} / {v2} in the options are replaced with the two version names in the order the participant used them.
+# The only survey, shown once after both versions (15 questions; three have a one-tap follow-up, the last has an optional free-text box).
+# kind: "radio" (one answer) or "multi" (up to `max`). ordered=True means the options run from low to high, so analyze.py can also report a 1-to-N mean.
+# follow = a second question under the first (always shown, with a "not applicable" option where needed). other_key = optional free-text box.
+# group "ps" = about PixelSense only, "overall" = about both versions. Edit the wording or options here and the form follows.
+LIKELY = ["Very unlikely", "Unlikely", "Not sure", "Likely", "Very likely"]
+HELPFUL = ["Not helpful at all", "Slightly helpful", "Moderately helpful", "Very helpful", "Extremely helpful"]
+COMFORT = ["Very uncomfortable", "Uncomfortable", "Neutral", "Comfortable", "Very comfortable"]
 FINAL_FORM = [
-    dict(key="easier_find", text="Which version made it easier to find a specific photo (a bill, a person)?", options=["PixelSense", "Gallery", "No difference"]),
-    dict(key="faster_cleanup", text="Which version was quicker for deleting the memes?", options=["PixelSense", "Gallery", "No difference"]),
-    dict(key="easier_collect", text="Which version made it easier to put photos together in a collection?", options=["PixelSense", "Gallery", "No difference"]),
-    dict(key="prompt_vs_manual", text="Compared with editing by hand, how likely are you to use edit by prompt?",
-         options=["Much more likely", "A little more likely", "About the same", "A little less likely", "Much less likely", "I did not try it"]),
-    dict(key="more_likely_use", text="Which version are you more likely to use for your own photos?", options=["PixelSense", "Gallery", "Both equally", "Neither"]),
-    dict(key="would_use", text="Would you use PixelSense on your own photos?", options=["Yes", "Maybe", "No"]),
-    dict(key="most_useful", text="Which PixelSense feature did you find most useful?",
-         options=["Search results under the search bar", "Coming up (bills and deadlines)", "Face groups (People)", "Edit by prompt",
-                  "Saving search results as a collection", "Clean up", "None of them"]),
-    dict(key="most_confusing", text="Which version had the part you found most confusing?", options=["PixelSense", "Gallery", "Neither"]),
+    dict(key="find_type", group="ps", kind="radio", ordered=True, options=LIKELY,
+         text="How likely are you to search your photos by typing a sentence (e.g. \u201cgas bill October 2026\u201d) instead of scrolling?"),
+    dict(key="find_match", group="ps", kind="radio", ordered=True, options=["Never", "Sometimes", "Most of the time", "Always"],
+         text="When you typed a request, how often did the first results match what you meant?"),
+    dict(key="attn_helpful", group="ps", kind="radio", ordered=True, options=HELPFUL,
+         text="How helpful is a list of upcoming bills and deadlines pulled from your screenshots?"),
+    dict(key="clean_worry", group="ps", kind="radio", ordered=True, options=["Not worried", "A little", "Quite", "Very"],
+         text="While removing photos, how worried were you about deleting something you would want later?"),
+    dict(key="clean_monthly", group="ps", kind="radio", ordered=True, options=LIKELY,
+         text="How likely are you to use Clean up on your own library every month?"),
+    dict(key="edit_use", group="ps", kind="radio", ordered=True, options=LIKELY,
+         text="How likely are you to use edit by prompt (e.g. \u201cmake it black and white\u201d) instead of manual tools?"),
+    dict(key="edit_match", group="ps", kind="radio", ordered=True, options=["Not at all", "Partly", "Mostly", "Exactly"],
+         text="How closely did the edit match what you typed?"),
+    dict(key="people_helpful", group="ps", kind="radio", ordered=True, options=HELPFUL,
+         text="How helpful is seeing all photos of one person by tapping their face?"),
+    dict(key="control", group="ps", kind="radio", ordered=True, options=["None", "A little", "Some", "A lot", "Complete"],
+         text="How much control did you feel you had over what the app did with your photos?"),
+    dict(key="safest", group="ps", kind="multi", max=2,
+         options=["Undo", "Originals never changed", "\u201cHow I found this\u201d", "Face groups are opt-in", "Nothing leaves the device", "None of these"],
+         text="Which made you feel safest? (choose up to two)"),
+    dict(key="read_comfort", group="ps", kind="radio", ordered=True, options=COMFORT,
+         text="How comfortable would you be letting PixelSense read bills and screenshots in your own library?"),
+    dict(key="prefer", group="overall", kind="radio", options=["Gallery", "PixelSense", "No preference"],
+         text="Which version would you rather use for your own photos?",
+         follow=dict(key="prefer_why", text="What mainly decided it?",
+                     options=["Finding photos faster", "Easier clean-up", "Editing by typing", "Felt more in control", "Easier to learn",
+                              "More familiar", "Privacy concerns", "Other", "No strong reason"])),
+    dict(key="freq", group="overall", kind="radio", options=["Daily", "Weekly", "Monthly", "Rarely", "Never"],
+         text="If PixelSense were on your phone today, how often would you use it?",
+         follow=dict(key="freq_barrier", text="What is the main thing that would hold you back?",
+                     options=["Privacy", "Not accurate enough", "I don\u2019t need it", "I already have a similar app", "Takes time to learn",
+                              "Nothing, I\u2019d use it"])),
+    dict(key="hardest", group="overall", kind="radio",
+         options=["Knowing what to type in the search bar", "Deciding what to Keep or Remove in Clean up", "Editing a photo (typing a request or cropping)",
+                  "Finding things (People, Collections, Trash)", "Nothing was hard"],
+         text="Which part was hardest to figure out?",
+         follow=dict(key="hardest_problem", text="What was the problem?",
+                     options=["Couldn\u2019t find where to do it", "The wording was unclear", "The result wasn\u2019t what I expected",
+                              "Not applicable, nothing was hard"])),
+    dict(key="change", group="overall", kind="radio", other_key="change_other",
+         options=["Search that understands my wording better", "A clearer reason why the app showed each result", "Easier editing",
+                  "Clearer menu names", "Nothing, it works well as it is", "Something else"],
+         text="Which one change would help you most?"),
 ]
-FINAL_FIELDS = ["timestamp", "participant"] + [q["key"] for q in FINAL_FORM] + ["comment"]
+
+
+def final_keys() -> list[str]:
+    """Every column final.csv needs, in question order (answer, then its follow-up or free-text box)."""
+    out = []
+    for q in FINAL_FORM:
+        out.append(q["key"])
+        if q.get("follow"):
+            out.append(q["follow"]["key"])
+        if q.get("other_key"):
+            out.append(q["other_key"])
+    return out
+
+
+FINAL_FIELDS = ["timestamp", "participant"] + final_keys()
 
 
 def _webhook_url():
@@ -200,10 +229,6 @@ def _append(name: str, fields: list, row: dict):
 
 def log_task(**row):
     _append("tasks.csv", TASK_FIELDS, {"timestamp": datetime.now().isoformat(timespec="seconds"), **row})
-
-
-def log_questionnaire(**row):
-    _append("questionnaires.csv", Q_FIELDS, {"timestamp": datetime.now().isoformat(timespec="seconds"), **row})
 
 
 def read_csv_bytes(name: str) -> bytes:

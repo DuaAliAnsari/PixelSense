@@ -1599,11 +1599,6 @@ def scale_radio(label, opts, key, low="", high="", mid=""):
         return v
 
 
-def sus_text(q):
-    """Item text; some versions of study.py store (text, is_positive) pairs."""
-    return q[0] if isinstance(q, (tuple, list)) else q
-
-
 TLX_FALLBACK = [("mental", "Mental demand", "How mentally demanding was it? (0 = very low, 100 = very high)"),
                 ("physical", "Physical demand", "How physically demanding was it? (0 = very low, 100 = very high)"),
                 ("temporal", "Hurry", "How hurried or rushed was the pace? (0 = very low, 100 = very high)"),
@@ -2549,47 +2544,46 @@ def study_between():
 
 
 def study_final():
-    """The only survey: how each version felt (same statements for both, side by side), then which one was better, then a comment."""
+    """The only survey, once, after both versions: 15 short questions (see FINAL_FORM in study.py)."""
     sd = S.study
-    md('<div class="sect"><b>Comparing the two versions</b></div>'
-       '<div class="sub" style="margin-top:0">One short survey for both versions. “Gallery” is the regular photo gallery you used first; '
-       '“PixelSense” is the version with the search bar. Everything is required except the last box.</div>')
-    names = ("Gallery", "PixelSense")
-    conds = ("Gallery (baseline)", "PixelSense")
+    md('<div class="sect"><b>Last step: a short survey</b></div>'
+       '<div class="sub" style="margin-top:0">15 quick questions, about 3 minutes. Questions 1 to 11 are about PixelSense. '
+       'Everything is required except the last box.</div>')
     with st.form("final_form"):
-        md('<div class="sect" style="margin-top:6px"><b>How did each version feel?</b></div>'
-           '<div class="sub" style="margin-top:0">Pick a number for each. <b>1 = strongly disagree, 5 = strongly agree</b>.</div>')
-        rated = {c: [] for c in conds}
-        for i, q in enumerate(ST.SUS_ITEMS):
-            text = sus_text(q).replace("this system", "this app").replace("the system", "the app")
-            with st.container(key=f"cmp_box_{i}"):
-                md(f'<div class="cmp-q">{i + 1}. {esc(text)}</div>')
-                cols = st.columns(2)
-                for col, nm, c in zip(cols, names, conds):
-                    with col:
-                        rated[c].append(st.selectbox(nm, [1, 2, 3, 4, 5], index=None, placeholder="Choose", format_func=lambda v: ST.AGREE_LABELS[v],
-                                                     key=f"cmp_{'g' if nm == 'Gallery' else 'p'}_{i}"))
-        md('<div class="sect" style="margin-top:14px"><b>Which one was better?</b></div>')
-        ans = {}
-        n0 = len(ST.SUS_ITEMS)
-        for n, q in enumerate(ST.FINAL_FORM):
-            with st.container(key=f"fin_box_{q['key']}"):
-                md(f'<div class="cmp-q">{n0 + n + 1}. {esc(q["text"])}</div>')
-                ans[q["key"]] = st.radio(q["text"], q["options"], index=None, key=f"fin_{q['key']}", label_visibility="collapsed")
-        md(f'<div class="cmp-q">{n0 + len(ST.FINAL_FORM) + 1}. Anything else you want to tell us? (optional)</div>')
-        comment = st.text_area("Anything else you want to tell us? (optional)", key="fin_comment", height=90, label_visibility="collapsed")
+        ans, nums, shown = {}, {}, set()
+        for n, q in enumerate(ST.FINAL_FORM, 1):
+            nums[q["key"]] = n
+            if q["group"] == "overall" and "overall" not in shown:
+                shown.add("overall")
+                md('<div class="sect" style="margin-top:14px"><b>Overall, both versions</b></div>')
+            elif q["group"] == "ps" and "ps" not in shown:
+                shown.add("ps")
+                md('<div class="sect" style="margin-top:6px"><b>About PixelSense</b></div>')
+            with st.container(key=f"fq_{q['key']}"):
+                md(f'<div class="cmp-q" style="margin-top:0">{n}. {esc(q["text"])}</div>')
+                if q["kind"] == "multi":
+                    ans[q["key"]] = st.multiselect(q["text"], q["options"], max_selections=q.get("max", 2), placeholder="Choose up to two",
+                                                   key=f"fin_{q['key']}", label_visibility="collapsed")
+                else:
+                    ans[q["key"]] = st.radio(q["text"], q["options"], index=None, key=f"fin_{q['key']}", label_visibility="collapsed")
+                f = q.get("follow")
+                if f:
+                    md(f'<div class="fq-sub">{esc(f["text"])}</div>')
+                    ans[f["key"]] = st.radio(f["text"], f["options"], index=None, key=f"fin_{f['key']}", label_visibility="collapsed")
+                if q.get("other_key"):
+                    ans[q["other_key"]] = st.text_input("If something else, tell us what (optional)", key=f"fin_{q['other_key']}")
         submitted = st.form_submit_button("Finish", type="primary")
     if submitted:
-        missing = [f"{i + 1} ({n})" for n, c in zip(names, conds) for i, v in enumerate(rated[c]) if v is None]
-        missing += [f"{len(ST.SUS_ITEMS) + n + 1}" for n, q in enumerate(ST.FINAL_FORM) if ans[q["key"]] is None]
+        missing = []
+        for q in ST.FINAL_FORM:
+            for k in (q["key"], (q.get("follow") or {}).get("key")):
+                if k and not ans[k]:
+                    missing.append(str(nums[q["key"]]) + ("" if k == q["key"] else " (follow-up)"))
         if missing:
             st.warning("Please answer: " + ", ".join(missing) + ".")
             return
-        for c in conds:
-            row = dict(participant=sd["pid"], condition=c, sus_score=ST.sus_score(rated[c]))
-            row.update({f"sus_{i + 1}": v for i, v in enumerate(rated[c])})
-            ST.log_questionnaire(**row)
-        ST.log_final(participant=sd["pid"], comment=comment.replace("\n", " "), **ans)
+        row = {k: (" | ".join(v) if isinstance(v, list) else (v or "").replace("\n", " ")) for k, v in ans.items()}
+        ST.log_final(participant=sd["pid"], **row)
         sd["step"] = "done"
         study_clear_answers()
         st.rerun()
@@ -2599,12 +2593,8 @@ def study_done():
     sd = S.study
     md(f'<div class="card pad glass info"><p><b>All done. Thank you, {esc(sd["pid"])}!</b></p><p>Your answers have been saved.</p></div>')
     with st.expander("Researcher: download data"):
-        c1, c2 = st.columns(2)
-        for col, name in zip((c1, c2), ("tasks.csv", "questionnaires.csv")):
-            with col:
-                st.download_button(f"Download {name}", ST.read_csv_bytes(name), file_name=name, mime="text/csv", key=f"dl_{name}")
-        c1, c2 = st.columns(2)
-        for col, name in zip((c1, c2), ("participants.csv", "final.csv")):
+        c1, c2, c3 = st.columns(3)
+        for col, name in zip((c1, c2, c3), ("tasks.csv", "participants.csv", "final.csv")):
             with col:
                 st.download_button(f"Download {name}", ST.read_csv_bytes(name), file_name=name, mime="text/csv", key=f"dl_{name}")
     with st.container(key="sm_stb"):
@@ -3518,4 +3508,4 @@ if S.scroll:
                         "const m=d.querySelector('[data-testid=\"stMain\"]')||d.querySelector('section.main');"
                         f"m.scrollTo(0,{target});}}catch(e){{}}}},140);</script>", height=0)
     except Exception:
-        pass
+        pass
